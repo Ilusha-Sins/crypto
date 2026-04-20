@@ -1,18 +1,20 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { placeMarketOrder } from '../api/orders.api';
 
 type Props = {
-  defaultSymbol?: string;
+  selectedSymbol: string;
+  onSymbolChange: (symbol: string) => void;
   onOrderCreated?: () => Promise<void> | void;
 };
 
 type Side = 'BUY' | 'SELL';
 
 export default function TradingPanel({
-  defaultSymbol = 'BTCUSDT',
+  selectedSymbol,
+  onSymbolChange,
   onOrderCreated,
 }: Props) {
-  const [symbol, setSymbol] = useState(defaultSymbol);
+  const [symbolInput, setSymbolInput] = useState(selectedSymbol);
   const [side, setSide] = useState<Side>('BUY');
   const [quantity, setQuantity] = useState('0.001');
   const [stopLoss, setStopLoss] = useState('');
@@ -21,7 +23,19 @@ export default function TradingPanel({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const normalizedSymbol = useMemo(() => symbol.trim().toUpperCase(), [symbol]);
+  useEffect(() => {
+    setSymbolInput(selectedSymbol);
+  }, [selectedSymbol]);
+
+  const normalizedBaseSymbol = useMemo(
+    () => symbolInput.trim().toUpperCase(),
+    [symbolInput],
+  );
+
+  const normalizedFullSymbol = useMemo(
+    () => `${normalizedBaseSymbol}USDT`,
+    [normalizedBaseSymbol],
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,14 +47,14 @@ export default function TradingPanel({
       const payload =
         side === 'BUY'
           ? {
-              symbol: normalizedSymbol,
+              symbol: normalizedFullSymbol,
               side,
               quantity,
               ...(stopLoss.trim() ? { stopLoss: stopLoss.trim() } : {}),
               ...(takeProfit.trim() ? { takeProfit: takeProfit.trim() } : {}),
             }
           : {
-              symbol: normalizedSymbol,
+              symbol: normalizedFullSymbol,
               side,
               quantity,
             };
@@ -49,15 +63,11 @@ export default function TradingPanel({
 
       setSuccessMessage(
         side === 'BUY'
-          ? `BUY order for ${normalizedSymbol} executed`
-          : `SELL order for ${normalizedSymbol} executed`,
+          ? `BUY order for ${normalizedFullSymbol} executed`
+          : `SELL order for ${normalizedFullSymbol} executed`,
       );
 
-      if (side === 'SELL') {
-        setStopLoss('');
-        setTakeProfit('');
-      }
-
+      onSymbolChange(normalizedBaseSymbol);
       await onOrderCreated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Order request failed');
@@ -74,7 +84,6 @@ export default function TradingPanel({
         padding: 16,
         background: '#111',
         color: '#fff',
-        maxWidth: 420,
       }}
     >
       <h2 style={{ marginTop: 0 }}>Trading Panel</h2>
@@ -87,10 +96,12 @@ export default function TradingPanel({
           <input
             id="symbol"
             style={{ width: '100%', padding: 10, borderRadius: 8 }}
-            value={symbol}
-            onChange={(event) => setSymbol(event.target.value)}
-            placeholder="BTCUSDT"
+            value={symbolInput}
+            onChange={(event) => setSymbolInput(event.target.value)}
+            onBlur={() => onSymbolChange(normalizedBaseSymbol)}
+            placeholder="BTC"
           />
+          <small style={{ opacity: 0.7 }}>Order symbol: {normalizedFullSymbol}</small>
         </div>
 
         <div style={{ marginBottom: 12 }}>
@@ -151,10 +162,7 @@ export default function TradingPanel({
           </>
         ) : null}
 
-        {error ? (
-          <p style={{ color: '#ff6b6b', marginBottom: 12 }}>{error}</p>
-        ) : null}
-
+        {error ? <p style={{ color: '#ff6b6b', marginBottom: 12 }}>{error}</p> : null}
         {successMessage ? (
           <p style={{ color: '#51cf66', marginBottom: 12 }}>{successMessage}</p>
         ) : null}
