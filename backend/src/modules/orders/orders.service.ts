@@ -12,7 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MarketService } from '../market/market.service';
-import { PlaceMarketOrderDto } from './dto/place-market-order.dto';
+import { PlaceMarketOrderDto } from './place-market-order.dto';
 
 @Injectable()
 export class OrdersService {
