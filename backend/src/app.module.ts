@@ -9,6 +9,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PositionsModule } from './modules/positions/positions.module';
 import { RiskMonitorModule } from './modules/risk-monitor/risk-monitor.module';
 import { HistoryModule } from './modules/history/history.module';
+import { AnalysisModule } from './modules/analysis/analysis.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { HistoryModule } from './modules/history/history.module';
     PositionsModule,
     RiskMonitorModule,
     HistoryModule,
+    AnalysisModule,
   ],
 })
 export class AppModule {}

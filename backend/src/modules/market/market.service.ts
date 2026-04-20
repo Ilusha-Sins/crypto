@@ -5,6 +5,31 @@ type BinancePriceResponse = {
   price: string;
 };
 
+type BinanceKlineRow = [
+  number,
+  string,
+  string,
+  string,
+  string,
+  string,
+  number,
+  string,
+  number,
+  string,
+  string,
+  string,
+];
+
+export type MarketKline = {
+  openTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  closeTime: number;
+};
+
 @Injectable()
 export class MarketService {
   private readonly baseUrl =
@@ -36,5 +61,40 @@ export class MarketService {
       symbol: data.symbol,
       price: data.price,
     };
+  }
+
+  async getKlines(symbol: string, interval: string, limit = 100) {
+    const normalizedSymbol = symbol.toUpperCase();
+
+    const url = new URL('/api/v3/klines', this.baseUrl);
+    url.searchParams.set('symbol', normalizedSymbol);
+    url.searchParams.set('interval', interval);
+    url.searchParams.set('limit', String(limit));
+
+    const response = await fetch(url.toString());
+
+    if (!response.ok) {
+      throw new BadRequestException(
+        `Failed to fetch klines for ${normalizedSymbol} (${interval})`,
+      );
+    }
+
+    const rows = (await response.json()) as BinanceKlineRow[];
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new BadRequestException(
+        `No klines returned for ${normalizedSymbol} (${interval})`,
+      );
+    }
+
+    return rows.map<MarketKline>((row) => ({
+      openTime: row[0],
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+      volume: Number(row[5]),
+      closeTime: row[6],
+    }));
   }
 }
