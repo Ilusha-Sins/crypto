@@ -4,7 +4,7 @@ import {
   CurrentUserType,
 } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PlaceMarketOrderDto } from './place-market-order.dto';
+import { PlaceMarketOrderDto } from './dto/place-market-order.dto';
 import { OrdersService } from './orders.service';
 
 @Controller('orders')

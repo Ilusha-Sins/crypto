@@ -12,7 +12,9 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MarketService } from '../market/market.service';
-import { PlaceMarketOrderDto } from './place-market-order.dto';
+import { PlaceMarketOrderDto } from './dto/place-market-order.dto';
+
+type RiskTrigger = 'STOP_LOSS' | 'TAKE_PROFIT';
 
 @Injectable()
 export class OrdersService {
@@ -70,12 +72,65 @@ export class OrdersService {
         });
       }
 
-      return this.handleSell(tx, {
+      const position = await tx.position.findFirst({
+        where: {
+          accountId: freshAccount.id,
+          symbol,
+          status: PositionStatus.OPEN,
+        },
+      });
+
+      if (!position) {
+        throw new BadRequestException(
+          `No open position found for ${symbol}`,
+        );
+      }
+
+      return this.executeSellAgainstPosition(tx, {
         accountId: freshAccount.id,
-        symbol,
+        cashBalance: freshAccount.cashBalance,
+        position,
         quantity,
         executionPrice,
-        cashBalance: freshAccount.cashBalance,
+      });
+    });
+  }
+
+  async executeRiskTriggeredSell(
+    positionId: string,
+    trigger: RiskTrigger,
+    executionPriceOverride?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const position = await tx.position.findUnique({
+        where: { id: positionId },
+      });
+
+      if (!position || position.status !== PositionStatus.OPEN) {
+        return null;
+      }
+
+      const account = await tx.demoAccount.findUnique({
+        where: { id: position.accountId },
+      });
+
+      if (!account) {
+        throw new NotFoundException('Demo account not found');
+      }
+
+      const executionPrice = executionPriceOverride
+        ? new Prisma.Decimal(executionPriceOverride)
+        : new Prisma.Decimal(
+            (await this.marketService.getCurrentPrice(position.symbol)).price,
+          );
+
+      return this.executeSellAgainstPosition(tx, {
+        accountId: account.id,
+        cashBalance: account.cashBalance,
+        position,
+        quantity: position.quantity,
+        executionPrice,
+        reason: trigger,
       });
     });
   }
@@ -194,38 +249,38 @@ export class OrdersService {
     };
   }
 
-  private async handleSell(
+  private async executeSellAgainstPosition(
     tx: Prisma.TransactionClient,
     params: {
       accountId: string;
-      symbol: string;
+      cashBalance: Prisma.Decimal;
+      position: {
+        id: string;
+        accountId: string;
+        symbol: string;
+        quantity: Prisma.Decimal;
+        averageEntryPrice: Prisma.Decimal;
+        stopLoss: Prisma.Decimal | null;
+        takeProfit: Prisma.Decimal | null;
+        status: PositionStatus;
+        openedAt: Date;
+        closedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+      };
       quantity: Prisma.Decimal;
       executionPrice: Prisma.Decimal;
-      cashBalance: Prisma.Decimal;
+      reason?: RiskTrigger;
     },
   ) {
-    const position = await tx.position.findFirst({
-      where: {
-        accountId: params.accountId,
-        symbol: params.symbol,
-        status: PositionStatus.OPEN,
-      },
-    });
-
-    if (!position) {
-      throw new BadRequestException(
-        `No open position found for ${params.symbol}`,
-      );
-    }
-
-    if (position.quantity.lt(params.quantity)) {
+    if (params.position.quantity.lt(params.quantity)) {
       throw new BadRequestException('Not enough asset quantity to sell');
     }
 
     const order = await tx.order.create({
       data: {
         accountId: params.accountId,
-        symbol: params.symbol,
+        symbol: params.position.symbol,
         side: OrderSide.SELL,
         type: OrderType.MARKET,
         quantity: params.quantity,
@@ -235,15 +290,15 @@ export class OrdersService {
     });
 
     const realizedPnl = params.executionPrice
-      .sub(position.averageEntryPrice)
+      .sub(params.position.averageEntryPrice)
       .mul(params.quantity);
 
-    const remainingQuantity = position.quantity.sub(params.quantity);
+    const remainingQuantity = params.position.quantity.sub(params.quantity);
 
     const updatedPosition =
       remainingQuantity.eq(0) || remainingQuantity.lte(0)
         ? await tx.position.update({
-            where: { id: position.id },
+            where: { id: params.position.id },
             data: {
               quantity: new Prisma.Decimal(0),
               status: PositionStatus.CLOSED,
@@ -251,7 +306,7 @@ export class OrdersService {
             },
           })
         : await tx.position.update({
-            where: { id: position.id },
+            where: { id: params.position.id },
             data: {
               quantity: remainingQuantity,
             },
@@ -261,8 +316,8 @@ export class OrdersService {
       data: {
         accountId: params.accountId,
         orderId: order.id,
-        positionId: position.id,
-        symbol: params.symbol,
+        positionId: params.position.id,
+        symbol: params.position.symbol,
         side: OrderSide.SELL,
         quantity: params.quantity,
         price: params.executionPrice,
@@ -280,7 +335,10 @@ export class OrdersService {
     });
 
     return {
-      message: 'Market SELL order executed',
+      message: params.reason
+        ? `Position closed by ${params.reason}`
+        : 'Market SELL order executed',
+      trigger: params.reason ?? null,
       order: this.serializeOrder(order),
       trade: this.serializeTrade(trade),
       position: this.serializePosition(updatedPosition),
