@@ -662,6 +662,17 @@ export default function CandlestickChart({
     });
   };
 
+  useEffect(() => {
+    onMarketDataChange?.({
+      symbol,
+      interval,
+      candles: data,
+      currentPrice: data.length > 0 ? data[data.length - 1].c : 0,
+      isLoading,
+      errorMsg,
+    });
+  }, [symbol, interval, data, isLoading, errorMsg, onMarketDataChange]);
+
   const scrollChart = (direction: -1 | 1) => {
     const chart = candleInstance.current;
     if (!chart) return;
