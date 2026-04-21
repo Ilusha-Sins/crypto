@@ -7,6 +7,7 @@ import HistoryPanel from '../components/HistoryPanel';
 import AnalysisPanel from '../components/AnalysisPanel';
 import OrderBookPanel from '../components/OrderBookPanel';
 import RiskCalculatorPanel from '../components/RiskCalculatorPanel';
+import TechnicalAnalysis from '../components/TechnicalAnalysis';
 import { getMyAccount, resetMyAccount } from '../api/account.api';
 import { getOpenPositions } from '../api/positions.api';
 import type { DemoAccount, OpenPositionsResponse, StoredUser } from '../types/api';
@@ -16,12 +17,29 @@ type Props = {
   onLogout: () => void;
 };
 
+type MarketSnapshot = {
+  symbol: string;
+  interval: string;
+  candles: any[];
+  currentPrice: number;
+  isLoading: boolean;
+  errorMsg: string | null;
+};
+
 export default function DashboardPage({ user, onLogout }: Props) {
   const [account, setAccount] = useState<DemoAccount | null>(null);
   const [positions, setPositions] = useState<OpenPositionsResponse | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [analysisRefreshKey, setAnalysisRefreshKey] = useState(0);
+  const [marketSnapshot, setMarketSnapshot] = useState<MarketSnapshot>({
+    symbol: 'BTC',
+    interval: '1m',
+    candles: [],
+    currentPrice: 0,
+    isLoading: true,
+    errorMsg: null,
+  });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -128,6 +146,7 @@ export default function DashboardPage({ user, onLogout }: Props) {
             <CandlestickChart
               selectedSymbol={selectedSymbol}
               onSymbolChange={setSelectedSymbol}
+              onMarketDataChange={setMarketSnapshot}
             />
           </div>
 
@@ -165,8 +184,16 @@ export default function DashboardPage({ user, onLogout }: Props) {
             marginBottom: 16,
           }}
         >
-          <RiskCalculatorPanel selectedSymbolFull={selectedSymbolFull} />
+          <RiskCalculatorPanel currentPrice={marketSnapshot.currentPrice} />
           <OrderBookPanel selectedSymbol={selectedSymbol} />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <TechnicalAnalysis
+            candles={marketSnapshot.candles}
+            symbol={selectedSymbol}
+            interval={marketSnapshot.interval}
+          />
         </div>
 
         <HistoryPanel

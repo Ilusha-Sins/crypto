@@ -21,6 +21,14 @@ Chart.register(CandlestickController, CandlestickElement, zoomPlugin);
 type CandlestickChartProps = {
   selectedSymbol?: string;
   onSymbolChange?: (symbol: string) => void;
+  onMarketDataChange?: (payload: {
+    symbol: string;
+    interval: string;
+    candles: Candle[];
+    currentPrice: number;
+    isLoading: boolean;
+    errorMsg: string | null;
+  }) => void;
 };
 
 const getIntervalMs = (intv: string): number => {
@@ -35,6 +43,7 @@ const getIntervalMs = (intv: string): number => {
 export default function CandlestickChart({
   selectedSymbol,
   onSymbolChange,
+  onMarketDataChange,
 }: CandlestickChartProps) {
   const candleRef = useRef<HTMLCanvasElement>(null);
   const candleInstance = useRef<Chart | null>(null);
