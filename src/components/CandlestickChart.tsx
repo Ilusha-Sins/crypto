@@ -1,12 +1,10 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
 import { CandlestickController, CandlestickElement } from "chartjs-chart-financial";
 import zoomPlugin from "chartjs-plugin-zoom";
 import "chartjs-adapter-date-fns";
 import axios from "axios";
-import TechnicalAnalysis from "./TechnicalAnalysis";
-import RiskCalculator from "./RiskCalculator";
-import OrderBook from "./OrderBook";
+
 import {
   detectCandlePatterns,
   calculateSeriesMA,
@@ -31,7 +29,7 @@ const getIntervalMs = (intv: string): number => {
   if (intv.endsWith("h")) return num * 60 * 60 * 1000;
   if (intv.endsWith("d")) return num * 24 * 60 * 60 * 1000;
   if (intv.endsWith("w")) return num * 7 * 24 * 60 * 60 * 1000;
-  return 60000;
+  return 60 * 1000;
 };
 
 export default function CandlestickChart({
@@ -50,7 +48,6 @@ export default function CandlestickChart({
   const [symbol, setSymbol] = useState(selectedSymbol ?? "BTC");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
   const [symbolsList, setSymbolsList] = useState<string[]>([]);
 
   const [overlays, setOverlays] = useState({
@@ -60,7 +57,9 @@ export default function CandlestickChart({
     patterns: true,
   });
 
-  const [drawTool, setDrawTool] = useState<"cursor" | "line" | "rect" | "text" | "fib">("cursor");
+  const [drawTool, setDrawTool] = useState<"cursor" | "line" | "rect" | "text" | "fib">(
+    "cursor",
+  );
   const [drawings, setDrawings] = useState<DrawingObject[]>([]);
   const drawingInProgress = useRef<DrawingObject | null>(null);
 
@@ -136,11 +135,8 @@ export default function CandlestickChart({
     const intervalMs = getIntervalMs(interval);
     const viewRange = intervalMs * 40;
 
-    const min = lastCandle.x - viewRange;
-    const max = lastCandle.x + intervalMs * 5;
-
-    setXMin(min);
-    setXMax(max);
+    setXMin(lastCandle.x - viewRange);
+    setXMax(lastCandle.x + intervalMs * 5);
   };
 
   const fetchHistoricalData = async (
@@ -149,7 +145,9 @@ export default function CandlestickChart({
     limit = 500,
   ) => {
     try {
-      if (!endTime) setErrorMsg(null);
+      if (!endTime) {
+        setErrorMsg(null);
+      }
 
       const params: Record<string, string | number> = {
         symbol: `${symbol}USDT`,
@@ -161,10 +159,14 @@ export default function CandlestickChart({
         params.endTime = endTime;
       }
 
-      const response = await axios.get("https://api.binance.com/api/v3/klines", { params });
+      const response = await axios.get("https://api.binance.com/api/v3/klines", {
+        params,
+      });
 
       if (!response.data || response.data.length === 0) {
-        if (!endTime) setErrorMsg("Дані для цієї пари відсутні.");
+        if (!endTime) {
+          setErrorMsg("Дані для цієї пари відсутні.");
+        }
         return;
       }
 
@@ -186,7 +188,9 @@ export default function CandlestickChart({
         const all = endTime ? [...formatted, ...prevData] : formatted;
         const uniqueMap = new Map<number, Candle>();
 
-        for (const c of all) uniqueMap.set(c.x, c);
+        for (const candle of all) {
+          uniqueMap.set(candle.x, candle);
+        }
 
         const uniqueArr = Array.from(uniqueMap.values()).sort((a, b) => a.x - b.x);
 
@@ -206,13 +210,17 @@ export default function CandlestickChart({
         const allVol = endTime ? [...volumeFormatted, ...prevVolume] : volumeFormatted;
         const uniqueVolMap = new Map<number, Volume>();
 
-        for (const v of allVol) uniqueVolMap.set(v.x, v);
+        for (const vol of allVol) {
+          uniqueVolMap.set(vol.x, vol);
+        }
 
         return Array.from(uniqueVolMap.values()).sort((a, b) => a.x - b.x);
       });
     } catch (err) {
       console.error("Помилка завантаження даних:", err);
-      if (!endTime) setErrorMsg("Помилка з'єднання з Binance API.");
+      if (!endTime) {
+        setErrorMsg("Помилка з'єднання з Binance API.");
+      }
     } finally {
       loadingOlder.current = false;
       setIsLoading(false);
@@ -234,19 +242,15 @@ export default function CandlestickChart({
 
   useEffect(() => {
     if (xMin !== null && xMax !== null) {
-      if (candleInstance.current) {
-        if (candleInstance.current.options.scales?.x) {
-          candleInstance.current.options.scales.x.min = xMin;
-          candleInstance.current.options.scales.x.max = xMax;
-        }
+      if (candleInstance.current?.options.scales?.x) {
+        candleInstance.current.options.scales.x.min = xMin;
+        candleInstance.current.options.scales.x.max = xMax;
         candleInstance.current.update("none");
       }
 
-      if (volumeInstance.current) {
-        if (volumeInstance.current.options.scales?.x) {
-          volumeInstance.current.options.scales.x.min = xMin;
-          volumeInstance.current.options.scales.x.max = xMax;
-        }
+      if (volumeInstance.current?.options.scales?.x) {
+        volumeInstance.current.options.scales.x.min = xMin;
+        volumeInstance.current.options.scales.x.max = xMax;
         volumeInstance.current.update("none");
       }
     }
@@ -289,11 +293,8 @@ export default function CandlestickChart({
     if (newRange < minRange) newRange = minRange;
     if (newRange > maxRange) newRange = maxRange;
 
-    const newMin = center - newRange / 2;
-    const newMax = center + newRange / 2;
-
-    setXMin(newMin);
-    setXMax(newMax);
+    setXMin(center - newRange / 2);
+    setXMax(center + newRange / 2);
   };
 
   useEffect(() => {
@@ -390,9 +391,7 @@ export default function CandlestickChart({
 
     candleInstance.current = new Chart(ctx, {
       type: "candlestick",
-      data: {
-        datasets,
-      },
+      data: { datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -427,9 +426,11 @@ export default function CandlestickChart({
                 const idx = tooltipItems[0].dataIndex;
                 const candleX = data[idx].x;
                 const pat = patterns.find((p) => p.x === candleX);
+
                 if (pat && overlays.patterns) {
                   return `Pattern: ${pat.name}`;
                 }
+
                 return [];
               },
             },
@@ -465,7 +466,10 @@ export default function CandlestickChart({
           },
           y: {
             position: "right",
-            grid: { color: "#f3f4f6", borderDash: [4, 4] } as any,
+            grid: {
+              color: "#f3f4f6",
+              borderDash: [4, 4],
+            } as any,
             ticks: {
               color: "#4b5563",
               callback: (value) => formatPrice(value as number),
@@ -485,7 +489,18 @@ export default function CandlestickChart({
         candleInstance.current = null;
       }
     };
-  }, [data, interval, overlays, indicatorSeries, drawTool, customPlugins, xMin, xMax, symbol, patterns]);
+  }, [
+    customPlugins,
+    data,
+    drawTool,
+    indicatorSeries,
+    interval,
+    overlays,
+    patterns,
+    symbol,
+    xMax,
+    xMin,
+  ]);
 
   useEffect(() => {
     if (!volumeRef.current || volumeData.length === 0) return;
@@ -561,7 +576,7 @@ export default function CandlestickChart({
         volumeInstance.current = null;
       }
     };
-  }, [volumeData, interval, drawTool, xMin, xMax]);
+  }, [drawTool, interval, volumeData, xMax, xMin]);
 
   useEffect(() => {
     if (isLoading || data.length === 0) return;
@@ -569,7 +584,9 @@ export default function CandlestickChart({
     const wsSymbol = symbol.toLowerCase();
     const wsUrl = `wss://stream.binance.com:9443/ws/${wsSymbol}usdt@kline_${interval}`;
 
-    if (wsRef.current) wsRef.current.close();
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
 
     try {
       wsRef.current = new WebSocket(wsUrl);
@@ -602,20 +619,21 @@ export default function CandlestickChart({
     }
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, [interval, symbol, isLoading, data.length]);
+  }, [data.length, interval, isLoading, symbol]);
 
   const upsertData = (candle: Candle, volume: Volume) => {
     setData((prev) => {
       if (prev.length === 0) return [candle];
 
       const last = prev[prev.length - 1];
-
       if (last.x === candle.x) {
-        const newData = [...prev];
-        newData[newData.length - 1] = candle;
-        return newData;
+        const next = [...prev];
+        next[next.length - 1] = candle;
+        return next;
       }
 
       return [...prev, candle];
@@ -625,11 +643,10 @@ export default function CandlestickChart({
       if (prev.length === 0) return [volume];
 
       const last = prev[prev.length - 1];
-
       if (last.x === volume.x) {
-        const newData = [...prev];
-        newData[newData.length - 1] = volume;
-        return newData;
+        const next = [...prev];
+        next[next.length - 1] = volume;
+        return next;
       }
 
       return [...prev, volume];
@@ -644,11 +661,8 @@ export default function CandlestickChart({
     const range = max - min;
     const step = range * 0.2;
 
-    const newMin = min + step * direction;
-    const newMax = max + step * direction;
-
-    setXMin(newMin);
-    setXMax(newMax);
+    setXMin(min + step * direction);
+    setXMax(max + step * direction);
 
     if (direction === -1) {
       handlePan(chart);
@@ -658,8 +672,8 @@ export default function CandlestickChart({
   const resetView = () => setInitialView(data);
 
   const formatVolume = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
     return num.toString();
   };
 
@@ -692,6 +706,7 @@ export default function CandlestickChart({
               </h2>
               <div className="text-sm text-gray-400">Таймфрейм: {interval}</div>
             </div>
+
             <button
               onClick={resetView}
               className="text-sm text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1 rounded-lg transition-colors"
@@ -744,7 +759,12 @@ export default function CandlestickChart({
               className="absolute left-2 top-1/3 z-20 p-2 bg-white/80 shadow-md border border-gray-100 rounded-full text-gray-600 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
               </svg>
             </button>
 
@@ -753,7 +773,12 @@ export default function CandlestickChart({
               className="absolute right-2 top-1/3 z-20 p-2 bg-white/80 shadow-md border border-gray-100 rounded-full text-gray-600 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
               </svg>
             </button>
 
@@ -770,19 +795,6 @@ export default function CandlestickChart({
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-        <div className="flex flex-col">
-          <RiskCalculator currentPrice={data.length > 0 ? data[data.length - 1].c : 0} />
-        </div>
-        <div className="flex flex-col">
-          <OrderBook symbol={symbol} />
-        </div>
-      </div>
-
-      <div className="w-full">
-        <TechnicalAnalysis candles={data} symbol={symbol} interval={interval} />
       </div>
     </div>
   );

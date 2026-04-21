@@ -4,6 +4,9 @@ import TradingPanel from '../components/TradingPanel';
 import AccountSummary from '../components/AccountSummary';
 import PositionsPanel from '../components/PositionsPanel';
 import HistoryPanel from '../components/HistoryPanel';
+import AnalysisPanel from '../components/AnalysisPanel';
+import OrderBookPanel from '../components/OrderBookPanel';
+import RiskCalculatorPanel from '../components/RiskCalculatorPanel';
 import { getMyAccount, resetMyAccount } from '../api/account.api';
 import { getOpenPositions } from '../api/positions.api';
 import type { DemoAccount, OpenPositionsResponse, StoredUser } from '../types/api';
@@ -18,6 +21,7 @@ export default function DashboardPage({ user, onLogout }: Props) {
   const [positions, setPositions] = useState<OpenPositionsResponse | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [analysisRefreshKey, setAnalysisRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -52,6 +56,7 @@ export default function DashboardPage({ user, onLogout }: Props) {
       await resetMyAccount();
       await loadDashboard();
       setHistoryRefreshKey((prev) => prev + 1);
+      setAnalysisRefreshKey((prev) => prev + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset account');
     }
@@ -60,6 +65,11 @@ export default function DashboardPage({ user, onLogout }: Props) {
   async function handleOrderCreated() {
     await loadDashboard();
     setHistoryRefreshKey((prev) => prev + 1);
+    setAnalysisRefreshKey((prev) => prev + 1);
+  }
+
+  async function handlePositionUpdated() {
+    await loadDashboard();
   }
 
   useEffect(() => {
@@ -139,14 +149,37 @@ export default function DashboardPage({ user, onLogout }: Props) {
               onOrderCreated={handleOrderCreated}
             />
 
-            <PositionsPanel data={positions} isLoading={isLoading} />
+            <PositionsPanel
+              data={positions}
+              isLoading={isLoading}
+              onPositionUpdated={handlePositionUpdated}
+            />
           </div>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 16,
+            marginBottom: 16,
+          }}
+        >
+          <RiskCalculatorPanel selectedSymbolFull={selectedSymbolFull} />
+          <OrderBookPanel selectedSymbol={selectedSymbol} />
         </div>
 
         <HistoryPanel
           selectedSymbolFull={selectedSymbolFull}
           refreshKey={historyRefreshKey}
         />
+
+        <div style={{ marginTop: 16 }}>
+          <AnalysisPanel
+            selectedSymbolFull={selectedSymbolFull}
+            refreshKey={analysisRefreshKey}
+          />
+        </div>
       </div>
     </div>
   );
