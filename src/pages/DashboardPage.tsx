@@ -184,7 +184,10 @@ export default function DashboardPage({ user, onLogout }: Props) {
             marginBottom: 16,
           }}
         >
-          <RiskCalculatorPanel currentPrice={marketSnapshot.currentPrice} />
+          <RiskCalculatorPanel
+  selectedSymbolFull={selectedSymbolFull}
+  fallbackPrice={marketSnapshot.currentPrice}
+/>
           <OrderBookPanel selectedSymbol={selectedSymbol} />
         </div>
 

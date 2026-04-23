@@ -1,16 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  getClosedPositions,
-  getPositionById,
-  updatePositionRisk,
-} from '../api/positions.api';
-import type {
-  ClosedPositionItem,
-  ClosedPositionsResponse,
-  OpenPositionItem,
-  OpenPositionsResponse,
-  PositionDetailsResponse,
-} from '../types/api';
+import { useEffect, useState } from 'react';
+import { createMarketStreamUrl } from '../api/market.api';
+import { updatePositionRisk } from '../api/positions.api';
+import type { OpenPositionsResponse } from '../types/api';
 
 type Props = {
   data: OpenPositionsResponse | null;
@@ -29,25 +20,39 @@ type DraftState = Record<
   }
 >;
 
-type DetailsState = Record<
-  string,
-  {
-    isOpen: boolean;
-    isLoading: boolean;
-    error: string | null;
-    data: PositionDetailsResponse | null;
+type LivePriceMap = Record<string, string>;
+
+function trimTrailingZeros(value: string) {
+  return value.replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '');
+}
+
+function formatPriceNumber(value: number) {
+  if (!Number.isFinite(value)) return null;
+
+  if (Math.abs(value) >= 1000) {
+    return value.toFixed(2);
   }
->;
 
-type Tab = 'open' | 'closed';
+  if (Math.abs(value) >= 1) {
+    return trimTrailingZeros(value.toFixed(4));
+  }
 
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  return new Date(value).toLocaleString();
+  return trimTrailingZeros(value.toFixed(6));
+}
+
+function formatPnlNumber(value: number) {
+  if (!Number.isFinite(value)) return null;
+  return trimTrailingZeros(value.toFixed(4));
+}
+
+function formatPercentNumber(value: number) {
+  if (!Number.isFinite(value)) return null;
+  return trimTrailingZeros(value.toFixed(2));
 }
 
 function pnlColor(value: string | null | undefined) {
   if (!value) return '#fff';
+
   const numeric = Number(value);
   if (Number.isNaN(numeric)) return '#fff';
   if (numeric > 0) return '#51cf66';
@@ -55,17 +60,60 @@ function pnlColor(value: string | null | undefined) {
   return '#fff';
 }
 
+function calculateLiveMetrics(
+  position: OpenPositionsResponse['positions'][number],
+  livePrice: string | undefined,
+) {
+  if (!livePrice) {
+    return {
+      currentPrice: position.currentPrice,
+      currentValue: position.currentValue,
+      unrealizedPnl: position.unrealizedPnl,
+      pnlPercent: position.pnlPercent,
+      isLive: false,
+    };
+  }
+
+  const quantity = Number(position.quantity);
+  const averageEntryPrice = Number(position.averageEntryPrice);
+  const currentPrice = Number(livePrice);
+
+  if (
+    Number.isNaN(quantity) ||
+    Number.isNaN(averageEntryPrice) ||
+    Number.isNaN(currentPrice)
+  ) {
+    return {
+      currentPrice: position.currentPrice,
+      currentValue: position.currentValue,
+      unrealizedPnl: position.unrealizedPnl,
+      pnlPercent: position.pnlPercent,
+      isLive: false,
+    };
+  }
+
+  const currentValue = currentPrice * quantity;
+  const investedValue = averageEntryPrice * quantity;
+  const unrealizedPnl = (currentPrice - averageEntryPrice) * quantity;
+  const pnlPercent =
+    investedValue === 0 ? 0 : (unrealizedPnl / investedValue) * 100;
+
+  return {
+    currentPrice: formatPriceNumber(currentPrice),
+    currentValue: formatPriceNumber(currentValue),
+    unrealizedPnl: formatPnlNumber(unrealizedPnl),
+    pnlPercent: formatPercentNumber(pnlPercent),
+    isLive: true,
+  };
+}
+
 export default function PositionsPanel({
   data,
   isLoading = false,
   onPositionUpdated,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('open');
   const [drafts, setDrafts] = useState<DraftState>({});
-  const [closedData, setClosedData] = useState<ClosedPositionsResponse | null>(null);
-  const [isClosedLoading, setIsClosedLoading] = useState(false);
-  const [closedError, setClosedError] = useState<string | null>(null);
-  const [details, setDetails] = useState<DetailsState>({});
+  const [livePrices, setLivePrices] = useState<LivePriceMap>({});
 
   useEffect(() => {
     if (!data?.positions) {
@@ -91,26 +139,81 @@ export default function PositionsPanel({
   }, [data]);
 
   useEffect(() => {
-    void loadClosedPositions();
+    const symbols = Array.from(
+      new Set((data?.positions ?? []).map((position) => position.symbol)),
+    );
+
+    if (symbols.length === 0) {
+      setLivePrices({});
+      return;
+    }
+
+    setLivePrices((prev) => {
+      const next: LivePriceMap = {};
+
+      for (const symbol of symbols) {
+        if (prev[symbol]) {
+          next[symbol] = prev[symbol];
+        }
+      }
+
+      return next;
+    });
+
+    const sources = symbols.map((symbol) => {
+      const source = new EventSource(createMarketStreamUrl(symbol, '1m'));
+
+      source.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as {
+            symbol: string;
+            interval: string;
+            candle: {
+              openTime: number;
+              open: number;
+              high: number;
+              low: number;
+              close: number;
+              volume: number;
+              closeTime: number;
+            };
+          };
+
+          const nextPrice = String(payload.candle.close);
+
+          setLivePrices((prev) => {
+            if (prev[symbol] === nextPrice) {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              [symbol]: nextPrice,
+            };
+          });
+        } catch (error) {
+          console.error('Failed to parse position stream payload', error);
+        }
+      };
+
+      source.onerror = () => {
+        // EventSource will try to reconnect automatically.
+      };
+
+      return source;
+    });
+
+    return () => {
+      for (const source of sources) {
+        source.close();
+      }
+    };
   }, [data]);
 
-  async function loadClosedPositions() {
-    setIsClosedLoading(true);
-    setClosedError(null);
-
-    try {
-      const response = await getClosedPositions();
-      setClosedData(response);
-    } catch (err) {
-      setClosedError(
-        err instanceof Error ? err.message : 'Failed to load closed positions',
-      );
-    } finally {
-      setIsClosedLoading(false);
-    }
-  }
-
-  function updateDraft(positionId: string, patch: Partial<DraftState[string]>) {
+  function updateDraft(
+    positionId: string,
+    patch: Partial<DraftState[string]>,
+  ) {
     setDrafts((prev) => ({
       ...prev,
       [positionId]: {
@@ -149,7 +252,6 @@ export default function PositionsPanel({
       });
 
       await onPositionUpdated?.();
-      await loadClosedPositions();
     } catch (err) {
       updateDraft(positionId, {
         isSaving: false,
@@ -167,420 +269,6 @@ export default function PositionsPanel({
     });
   }
 
-  async function toggleDetails(positionId: string) {
-    const existing = details[positionId];
-
-    if (existing?.isOpen) {
-      setDetails((prev) => ({
-        ...prev,
-        [positionId]: {
-          ...prev[positionId],
-          isOpen: false,
-        },
-      }));
-      return;
-    }
-
-    if (existing?.data) {
-      setDetails((prev) => ({
-        ...prev,
-        [positionId]: {
-          ...prev[positionId],
-          isOpen: true,
-          error: null,
-        },
-      }));
-      return;
-    }
-
-    setDetails((prev) => ({
-      ...prev,
-      [positionId]: {
-        isOpen: true,
-        isLoading: true,
-        error: null,
-        data: null,
-      },
-    }));
-
-    try {
-      const response = await getPositionById(positionId);
-
-      setDetails((prev) => ({
-        ...prev,
-        [positionId]: {
-          isOpen: true,
-          isLoading: false,
-          error: null,
-          data: response,
-        },
-      }));
-    } catch (err) {
-      setDetails((prev) => ({
-        ...prev,
-        [positionId]: {
-          isOpen: true,
-          isLoading: false,
-          error: err instanceof Error ? err.message : 'Failed to load details',
-          data: null,
-        },
-      }));
-    }
-  }
-
-  const openPositions = useMemo(() => data?.positions ?? [], [data]);
-  const closedPositions = useMemo(
-    () => closedData?.positions ?? [],
-    [closedData],
-  );
-
-  function renderDetails(positionId: string) {
-    const detailState = details[positionId];
-
-    if (!detailState?.isOpen) {
-      return null;
-    }
-
-    return (
-      <div
-        style={{
-          marginTop: 12,
-          padding: 12,
-          border: '1px solid #2a2a2a',
-          borderRadius: 10,
-          background: '#101010',
-        }}
-      >
-        {detailState.isLoading ? <p>Loading details...</p> : null}
-        {detailState.error ? (
-          <p style={{ color: '#ff6b6b' }}>{detailState.error}</p>
-        ) : null}
-
-        {detailState.data ? (
-          <>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: 10,
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <strong>Status</strong>
-                <p>{detailState.data.status}</p>
-              </div>
-              <div>
-                <strong>Opened</strong>
-                <p>{formatDate(detailState.data.openedAt)}</p>
-              </div>
-              <div>
-                <strong>Closed</strong>
-                <p>{formatDate(detailState.data.closedAt)}</p>
-              </div>
-              <div>
-                <strong>Invested</strong>
-                <p>{detailState.data.investedValue}</p>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: 10,
-                marginBottom: 14,
-              }}
-            >
-              <div>
-                <strong>Current price</strong>
-                <p>{detailState.data.currentPrice ?? '—'}</p>
-              </div>
-              <div>
-                <strong>Current value</strong>
-                <p>{detailState.data.currentValue ?? '—'}</p>
-              </div>
-              <div>
-                <strong>Unrealized PnL</strong>
-                <p style={{ color: pnlColor(detailState.data.unrealizedPnl) }}>
-                  {detailState.data.unrealizedPnl ?? '—'}
-                </p>
-              </div>
-              <div>
-                <strong>PnL %</strong>
-                <p style={{ color: pnlColor(detailState.data.pnlPercent) }}>
-                  {detailState.data.pnlPercent ?? '—'}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <h4 style={{ marginTop: 0 }}>Trades</h4>
-
-              {detailState.data.trades.length === 0 ? (
-                <p>No trades for this position</p>
-              ) : (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {detailState.data.trades.map((trade) => (
-                    <div
-                      key={trade.id}
-                      style={{
-                        padding: 10,
-                        borderRadius: 8,
-                        background: '#171717',
-                        border: '1px solid #242424',
-                      }}
-                    >
-                      <strong>
-                        {trade.side} · {trade.symbol}
-                      </strong>
-                      <p style={{ margin: '6px 0' }}>Qty: {trade.quantity}</p>
-                      <p style={{ margin: '6px 0' }}>Price: {trade.price}</p>
-                      <p
-                        style={{
-                          margin: '6px 0',
-                          color: pnlColor(trade.realizedPnl),
-                        }}
-                      >
-                        Realized PnL: {trade.realizedPnl ?? '—'}
-                      </p>
-                      <p style={{ margin: '6px 0 0 0', opacity: 0.75 }}>
-                        {formatDate(trade.executedAt)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        ) : null}
-      </div>
-    );
-  }
-
-  function renderOpenPosition(position: OpenPositionItem) {
-    const draft = drafts[position.id] ?? {
-      stopLoss: position.stopLoss ?? '',
-      takeProfit: position.takeProfit ?? '',
-      isSaving: false,
-      error: null,
-      success: null,
-    };
-
-    const detailState = details[position.id];
-
-    return (
-      <div
-        key={position.id}
-        style={{
-          border: '1px solid #2a2a2a',
-          borderRadius: 10,
-          padding: 12,
-          background: '#171717',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            alignItems: 'start',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div>
-            <strong>{position.symbol}</strong>
-            <p style={{ margin: '6px 0' }}>Quantity: {position.quantity}</p>
-            <p style={{ margin: '6px 0' }}>
-              Avg entry: {position.averageEntryPrice}
-            </p>
-            <p style={{ margin: '6px 0' }}>
-              Current price: {position.currentPrice ?? '—'}
-            </p>
-            <p
-              style={{
-                margin: '6px 0',
-                color: pnlColor(position.unrealizedPnl),
-              }}
-            >
-              Unrealized PnL: {position.unrealizedPnl ?? '—'}
-            </p>
-            <p
-              style={{
-                margin: '6px 0',
-                color: pnlColor(position.pnlPercent),
-              }}
-            >
-              PnL %: {position.pnlPercent ?? '—'}
-            </p>
-            <p style={{ margin: '6px 0' }}>Current SL: {position.stopLoss ?? '—'}</p>
-            <p style={{ margin: '6px 0 12px 0' }}>
-              Current TP: {position.takeProfit ?? '—'}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void toggleDetails(position.id)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #2a2a2a',
-              background: '#111',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            {detailState?.isOpen ? 'Hide details' : 'View details'}
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 10,
-            marginBottom: 10,
-          }}
-        >
-          <div>
-            <label
-              htmlFor={`sl-${position.id}`}
-              style={{ display: 'block', marginBottom: 6 }}
-            >
-              Stop Loss
-            </label>
-            <input
-              id={`sl-${position.id}`}
-              value={draft.stopLoss}
-              onChange={(event) =>
-                updateDraft(position.id, {
-                  stopLoss: event.target.value,
-                  error: null,
-                  success: null,
-                })
-              }
-              placeholder="Empty = clear"
-              style={{
-                width: '100%',
-                padding: 10,
-                borderRadius: 8,
-              }}
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor={`tp-${position.id}`}
-              style={{ display: 'block', marginBottom: 6 }}
-            >
-              Take Profit
-            </label>
-            <input
-              id={`tp-${position.id}`}
-              value={draft.takeProfit}
-              onChange={(event) =>
-                updateDraft(position.id, {
-                  takeProfit: event.target.value,
-                  error: null,
-                  success: null,
-                })
-              }
-              placeholder="Empty = clear"
-              style={{
-                width: '100%',
-                padding: 10,
-                borderRadius: 8,
-              }}
-            />
-          </div>
-        </div>
-
-        {draft.error ? (
-          <p style={{ color: '#ff6b6b', margin: '6px 0' }}>{draft.error}</p>
-        ) : null}
-
-        {draft.success ? (
-          <p style={{ color: '#51cf66', margin: '6px 0' }}>{draft.success}</p>
-        ) : null}
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => void handleSave(position.id)}
-            disabled={draft.isSaving}
-          >
-            {draft.isSaving ? 'Saving...' : 'Save risk'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleClear(position.id)}
-            disabled={draft.isSaving}
-          >
-            Clear inputs
-          </button>
-        </div>
-
-        {renderDetails(position.id)}
-      </div>
-    );
-  }
-
-  function renderClosedPosition(position: ClosedPositionItem) {
-    const detailState = details[position.id];
-
-    return (
-      <div
-        key={position.id}
-        style={{
-          border: '1px solid #2a2a2a',
-          borderRadius: 10,
-          padding: 12,
-          background: '#171717',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            alignItems: 'start',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div>
-            <strong>{position.symbol}</strong>
-            <p style={{ margin: '6px 0' }}>Quantity: {position.quantity}</p>
-            <p style={{ margin: '6px 0' }}>
-              Avg entry: {position.averageEntryPrice}
-            </p>
-            <p style={{ margin: '6px 0' }}>Opened: {formatDate(position.openedAt)}</p>
-            <p style={{ margin: '6px 0' }}>Closed: {formatDate(position.closedAt)}</p>
-            <p style={{ margin: '6px 0' }}>Final SL: {position.stopLoss ?? '—'}</p>
-            <p style={{ margin: '6px 0' }}>Final TP: {position.takeProfit ?? '—'}</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void toggleDetails(position.id)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #2a2a2a',
-              background: '#111',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            {detailState?.isOpen ? 'Hide details' : 'View details'}
-          </button>
-        </div>
-
-        {renderDetails(position.id)}
-      </div>
-    );
-  }
-
   return (
     <div
       style={{
@@ -591,77 +279,208 @@ export default function PositionsPanel({
         color: '#fff',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 12,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          marginBottom: 16,
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Positions</h2>
+      <h2 style={{ marginTop: 0 }}>Open Positions</h2>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('open')}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #2a2a2a',
-              background: activeTab === 'open' ? '#1f1f1f' : '#111',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            Open ({data?.count ?? 0})
-          </button>
+      {isLoading ? <p>Loading positions...</p> : null}
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('closed')}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #2a2a2a',
-              background: activeTab === 'closed' ? '#1f1f1f' : '#111',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            Closed ({closedData?.count ?? 0})
-          </button>
-        </div>
+      {!isLoading && (!data || data.positions.length === 0) ? (
+        <p>No open positions</p>
+      ) : null}
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        {data?.positions.map((position) => {
+          const draft = drafts[position.id] ?? {
+            stopLoss: position.stopLoss ?? '',
+            takeProfit: position.takeProfit ?? '',
+            isSaving: false,
+            error: null,
+            success: null,
+          };
+
+          const metrics = calculateLiveMetrics(
+            position,
+            livePrices[position.symbol],
+          );
+
+          return (
+            <div
+              key={position.id}
+              style={{
+                border: '1px solid #2a2a2a',
+                borderRadius: 10,
+                padding: 12,
+                background: '#171717',
+              }}
+            >
+              <strong>{position.symbol}</strong>
+              <p style={{ margin: '6px 0' }}>Quantity: {position.quantity}</p>
+              <p style={{ margin: '6px 0' }}>
+                Avg entry: {position.averageEntryPrice}
+              </p>
+
+              <p style={{ margin: '6px 0' }}>
+                Current price: {metrics.currentPrice ?? '—'}{' '}
+                {metrics.isLive ? (
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      marginLeft: 8,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: 'rgba(37, 99, 235, 0.18)',
+                      color: '#93c5fd',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    LIVE
+                  </span>
+                ) : null}
+              </p>
+
+              <p style={{ margin: '6px 0' }}>
+                Current value: {metrics.currentValue ?? '—'}
+              </p>
+
+              <p
+                style={{
+                  margin: '6px 0',
+                  color: pnlColor(metrics.unrealizedPnl),
+                }}
+              >
+                Unrealized PnL: {metrics.unrealizedPnl ?? '—'}
+              </p>
+
+              <p
+                style={{
+                  margin: '6px 0',
+                  color: pnlColor(metrics.pnlPercent),
+                }}
+              >
+                PnL %: {metrics.pnlPercent ?? '—'}
+              </p>
+
+              <p style={{ margin: '6px 0' }}>
+                Current SL: {position.stopLoss ?? '—'}
+              </p>
+              <p style={{ margin: '6px 0 12px 0' }}>
+                Current TP: {position.takeProfit ?? '—'}
+              </p>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <div>
+                  <label
+                    htmlFor={`sl-${position.id}`}
+                    style={{ display: 'block', marginBottom: 6 }}
+                  >
+                    Stop Loss
+                  </label>
+                  <input
+                    id={`sl-${position.id}`}
+                    value={draft.stopLoss}
+                    onChange={(event) =>
+                      updateDraft(position.id, {
+                        stopLoss: event.target.value,
+                        error: null,
+                        success: null,
+                      })
+                    }
+                    placeholder="Empty = clear"
+                    style={{
+                      width: '100%',
+                      padding: 10,
+                      borderRadius: 8,
+                      border: '1px solid #2a2a2a',
+                      background: '#111',
+                      color: '#fff',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor={`tp-${position.id}`}
+                    style={{ display: 'block', marginBottom: 6 }}
+                  >
+                    Take Profit
+                  </label>
+                  <input
+                    id={`tp-${position.id}`}
+                    value={draft.takeProfit}
+                    onChange={(event) =>
+                      updateDraft(position.id, {
+                        takeProfit: event.target.value,
+                        error: null,
+                        success: null,
+                      })
+                    }
+                    placeholder="Empty = clear"
+                    style={{
+                      width: '100%',
+                      padding: 10,
+                      borderRadius: 8,
+                      border: '1px solid #2a2a2a',
+                      background: '#111',
+                      color: '#fff',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {draft.error ? (
+                <p style={{ color: '#ff6b6b', margin: '6px 0' }}>{draft.error}</p>
+              ) : null}
+
+              {draft.success ? (
+                <p style={{ color: '#51cf66', margin: '6px 0' }}>{draft.success}</p>
+              ) : null}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => void handleSave(position.id)}
+                  disabled={draft.isSaving}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #2a2a2a',
+                    background: '#2563eb',
+                    color: '#fff',
+                    cursor: draft.isSaving ? 'not-allowed' : 'pointer',
+                    opacity: draft.isSaving ? 0.6 : 1,
+                  }}
+                >
+                  {draft.isSaving ? 'Saving...' : 'Save risk'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleClear(position.id)}
+                  disabled={draft.isSaving}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #2a2a2a',
+                    background: '#111',
+                    color: '#fff',
+                    cursor: draft.isSaving ? 'not-allowed' : 'pointer',
+                    opacity: draft.isSaving ? 0.6 : 1,
+                  }}
+                >
+                  Clear inputs
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
-
-      {activeTab === 'open' ? (
-        <>
-          {isLoading ? <p>Loading positions...</p> : null}
-
-          {!isLoading && openPositions.length === 0 ? (
-            <p>No open positions</p>
-          ) : null}
-
-          <div style={{ display: 'grid', gap: 12 }}>
-            {openPositions.map(renderOpenPosition)}
-          </div>
-        </>
-      ) : (
-        <>
-          {isClosedLoading ? <p>Loading closed positions...</p> : null}
-          {closedError ? <p style={{ color: '#ff6b6b' }}>{closedError}</p> : null}
-
-          {!isClosedLoading && !closedError && closedPositions.length === 0 ? (
-            <p>No closed positions yet</p>
-          ) : null}
-
-          <div style={{ display: 'grid', gap: 12 }}>
-            {closedPositions.map(renderClosedPosition)}
-          </div>
-        </>
-      )}
     </div>
   );
 }

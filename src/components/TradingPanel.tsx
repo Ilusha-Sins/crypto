@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { placeMarketOrder } from '../api/orders.api';
+import { useMarketPriceStream } from '../hooks/useMarketPriceStream';
 
 type Props = {
   selectedSymbol: string;
@@ -8,6 +9,24 @@ type Props = {
 };
 
 type Side = 'BUY' | 'SELL';
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 10,
+  borderRadius: 8,
+  border: '1px solid #2a2a2a',
+  background: '#171717',
+  color: '#fff',
+};
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 10,
+  borderRadius: 8,
+  border: '1px solid #2a2a2a',
+  background: '#171717',
+  color: '#fff',
+};
 
 export default function TradingPanel({
   selectedSymbol,
@@ -36,6 +55,21 @@ export default function TradingPanel({
     () => `${normalizedBaseSymbol}USDT`,
     [normalizedBaseSymbol],
   );
+
+  const { price: livePrice, isLive, isLoading: isPriceLoading } =
+    useMarketPriceStream(normalizedFullSymbol, {
+      enabled: Boolean(normalizedBaseSymbol),
+    });
+
+  const estimatedValue = useMemo(() => {
+    const qty = Number(quantity);
+
+    if (Number.isNaN(qty) || qty <= 0 || livePrice <= 0) {
+      return null;
+    }
+
+    return qty * livePrice;
+  }, [livePrice, quantity]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,13 +129,47 @@ export default function TradingPanel({
           </label>
           <input
             id="symbol"
-            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+            style={inputStyle}
             value={symbolInput}
             onChange={(event) => setSymbolInput(event.target.value)}
             onBlur={() => onSymbolChange(normalizedBaseSymbol)}
             placeholder="BTC"
           />
-          <small style={{ opacity: 0.7 }}>Order symbol: {normalizedFullSymbol}</small>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginTop: 8,
+              flexWrap: 'wrap',
+              fontSize: 13,
+              opacity: 0.9,
+            }}
+          >
+            <small>Order symbol: {normalizedFullSymbol}</small>
+            <small>
+              Live price:{' '}
+              {isPriceLoading
+                ? 'Loading...'
+                : livePrice > 0
+                  ? livePrice
+                  : '—'}{' '}
+              {isLive ? (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'rgba(37, 99, 235, 0.18)',
+                    color: '#93c5fd',
+                    fontWeight: 700,
+                  }}
+                >
+                  LIVE
+                </span>
+              ) : null}
+            </small>
+          </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
@@ -110,7 +178,7 @@ export default function TradingPanel({
           </label>
           <select
             id="side"
-            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+            style={selectStyle}
             value={side}
             onChange={(event) => setSide(event.target.value as Side)}
           >
@@ -125,22 +193,29 @@ export default function TradingPanel({
           </label>
           <input
             id="quantity"
-            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+            style={inputStyle}
             value={quantity}
             onChange={(event) => setQuantity(event.target.value)}
             placeholder="0.001"
           />
+          <small style={{ display: 'block', marginTop: 8, opacity: 0.8 }}>
+            Estimated notional:{' '}
+            {estimatedValue !== null ? `$${estimatedValue.toFixed(2)}` : '—'}
+          </small>
         </div>
 
         {side === 'BUY' ? (
           <>
             <div style={{ marginBottom: 12 }}>
-              <label htmlFor="stopLoss" style={{ display: 'block', marginBottom: 6 }}>
+              <label
+                htmlFor="stopLoss"
+                style={{ display: 'block', marginBottom: 6 }}
+              >
                 Stop Loss
               </label>
               <input
                 id="stopLoss"
-                style={{ width: '100%', padding: 10, borderRadius: 8 }}
+                style={inputStyle}
                 value={stopLoss}
                 onChange={(event) => setStopLoss(event.target.value)}
                 placeholder="Optional"
@@ -148,12 +223,15 @@ export default function TradingPanel({
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label htmlFor="takeProfit" style={{ display: 'block', marginBottom: 6 }}>
+              <label
+                htmlFor="takeProfit"
+                style={{ display: 'block', marginBottom: 6 }}
+              >
                 Take Profit
               </label>
               <input
                 id="takeProfit"
-                style={{ width: '100%', padding: 10, borderRadius: 8 }}
+                style={inputStyle}
                 value={takeProfit}
                 onChange={(event) => setTakeProfit(event.target.value)}
                 placeholder="Optional"
@@ -174,9 +252,12 @@ export default function TradingPanel({
             width: '100%',
             padding: 12,
             borderRadius: 8,
-            border: 'none',
-            cursor: 'pointer',
+            border: '1px solid #2a2a2a',
+            background: '#2563eb',
+            color: '#fff',
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
             fontWeight: 600,
+            opacity: isSubmitting ? 0.6 : 1,
           }}
         >
           {isSubmitting ? 'Submitting...' : `Execute ${side}`}

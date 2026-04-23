@@ -1,4 +1,13 @@
 import { apiRequest } from './client';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api';
+
+export function createMarketStreamUrl(symbol: string, interval: string) {
+  const params = new URLSearchParams({
+    symbol,
+    interval,
+  });
+  return `${API_URL}/market/stream?${params.toString()}`;
+}
 
 export type MarketPriceResponse = {
   symbol: string;
