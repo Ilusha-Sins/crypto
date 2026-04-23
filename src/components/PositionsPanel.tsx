@@ -281,9 +281,48 @@ export default function PositionsPanel({
     });
   }
 
+  const positionsCount = data?.positions.length ?? 0;
+
   return (
-    <div style={panelPaddedStyle}>
-      <h2 style={{ marginTop: 0 }}>Open Positions</h2>
+    <div
+      style={{
+        ...panelPaddedStyle,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 12,
+        }}
+      >
+        <div>
+          <h2 style={{ marginTop: 0, marginBottom: 6 }}>Open Positions</h2>
+          <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>
+            Live PnL and editable risk levels
+          </p>
+        </div>
+
+        <div
+          style={{
+            padding: '8px 10px',
+            borderRadius: 10,
+            border: '1px solid #2a2a2a',
+            background: '#171717',
+            color: '#e5e7eb',
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {positionsCount} position{positionsCount === 1 ? '' : 's'}
+        </div>
+      </div>
 
       {isLoading ? <p>Loading positions...</p> : null}
 
@@ -291,150 +330,161 @@ export default function PositionsPanel({
         <p>No open positions</p>
       ) : null}
 
-      <div style={{ display: 'grid', gap: 12 }}>
-        {data?.positions.map((position) => {
-          const draft = drafts[position.id] ?? {
-            stopLoss: position.stopLoss ?? '',
-            takeProfit: position.takeProfit ?? '',
-            isSaving: false,
-            error: null,
-            success: null,
-          };
+      {data?.positions.length ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 12,
+            maxHeight: 'min(72vh, 980px)',
+            overflowY: 'auto',
+            paddingRight: 4,
+            minHeight: 0,
+          }}
+        >
+          {data.positions.map((position) => {
+            const draft = drafts[position.id] ?? {
+              stopLoss: position.stopLoss ?? '',
+              takeProfit: position.takeProfit ?? '',
+              isSaving: false,
+              error: null,
+              success: null,
+            };
 
-          const metrics = calculateLiveMetrics(
-            position,
-            livePrices[position.symbol],
-          );
+            const metrics = calculateLiveMetrics(
+              position,
+              livePrices[position.symbol],
+            );
 
-          return (
-            <div key={position.id} style={cardStyle}>
-              <strong>{position.symbol}</strong>
-              <p style={{ margin: '6px 0' }}>Quantity: {position.quantity}</p>
-              <p style={{ margin: '6px 0' }}>
-                Avg entry: {position.averageEntryPrice}
-              </p>
-
-              <p style={{ margin: '6px 0' }}>
-                Current price: {metrics.currentPrice ?? '—'}{' '}
-                {metrics.isLive ? <span style={liveBadgeStyle}>LIVE</span> : null}
-              </p>
-
-              <p style={{ margin: '6px 0' }}>
-                Current value: {metrics.currentValue ?? '—'}
-              </p>
-
-              <p
-                style={{
-                  margin: '6px 0',
-                  color: pnlColor(metrics.unrealizedPnl),
-                }}
-              >
-                Unrealized PnL: {metrics.unrealizedPnl ?? '—'}
-              </p>
-
-              <p
-                style={{
-                  margin: '6px 0',
-                  color: pnlColor(metrics.pnlPercent),
-                }}
-              >
-                PnL %: {metrics.pnlPercent ?? '—'}
-              </p>
-
-              <p style={{ margin: '6px 0' }}>
-                Current SL: {position.stopLoss ?? '—'}
-              </p>
-              <p style={{ margin: '6px 0 12px 0' }}>
-                Current TP: {position.takeProfit ?? '—'}
-              </p>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 10,
-                  marginBottom: 10,
-                }}
-              >
-                <div>
-                  <label htmlFor={`sl-${position.id}`} style={labelStyle}>
-                    Stop Loss
-                  </label>
-                  <input
-                    id={`sl-${position.id}`}
-                    value={draft.stopLoss}
-                    onChange={(event) =>
-                      updateDraft(position.id, {
-                        stopLoss: event.target.value,
-                        error: null,
-                        success: null,
-                      })
-                    }
-                    placeholder="Empty = clear"
-                    style={inputStyle}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor={`tp-${position.id}`} style={labelStyle}>
-                    Take Profit
-                  </label>
-                  <input
-                    id={`tp-${position.id}`}
-                    value={draft.takeProfit}
-                    onChange={(event) =>
-                      updateDraft(position.id, {
-                        takeProfit: event.target.value,
-                        error: null,
-                        success: null,
-                      })
-                    }
-                    placeholder="Empty = clear"
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
-              {draft.error ? (
-                <p style={{ ...dangerTextStyle, margin: '6px 0' }}>
-                  {draft.error}
+            return (
+              <div key={position.id} style={cardStyle}>
+                <strong>{position.symbol}</strong>
+                <p style={{ margin: '6px 0' }}>Quantity: {position.quantity}</p>
+                <p style={{ margin: '6px 0' }}>
+                  Avg entry: {position.averageEntryPrice}
                 </p>
-              ) : null}
 
-              {draft.success ? (
-                <p style={{ ...successTextStyle, margin: '6px 0' }}>
-                  {draft.success}
+                <p style={{ margin: '6px 0' }}>
+                  Current price: {metrics.currentPrice ?? '—'}{' '}
+                  {metrics.isLive ? <span style={liveBadgeStyle}>LIVE</span> : null}
                 </p>
-              ) : null}
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => void handleSave(position.id)}
-                  disabled={draft.isSaving}
+                <p style={{ margin: '6px 0' }}>
+                  Current value: {metrics.currentValue ?? '—'}
+                </p>
+
+                <p
                   style={{
-                    ...withDisabled(buttonPrimaryStyle, draft.isSaving),
-                    borderRadius: 8,
+                    margin: '6px 0',
+                    color: pnlColor(metrics.unrealizedPnl),
                   }}
                 >
-                  {draft.isSaving ? 'Saving...' : 'Save risk'}
-                </button>
+                  Unrealized PnL: {metrics.unrealizedPnl ?? '—'}
+                </p>
 
-                <button
-                  type="button"
-                  onClick={() => handleClear(position.id)}
-                  disabled={draft.isSaving}
+                <p
                   style={{
-                    ...withDisabled(buttonSecondaryStyle, draft.isSaving),
-                    borderRadius: 8,
+                    margin: '6px 0',
+                    color: pnlColor(metrics.pnlPercent),
                   }}
                 >
-                  Clear inputs
-                </button>
+                  PnL %: {metrics.pnlPercent ?? '—'}
+                </p>
+
+                <p style={{ margin: '6px 0' }}>
+                  Current SL: {position.stopLoss ?? '—'}
+                </p>
+                <p style={{ margin: '6px 0 12px 0' }}>
+                  Current TP: {position.takeProfit ?? '—'}
+                </p>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <div>
+                    <label htmlFor={`sl-${position.id}`} style={labelStyle}>
+                      Stop Loss
+                    </label>
+                    <input
+                      id={`sl-${position.id}`}
+                      value={draft.stopLoss}
+                      onChange={(event) =>
+                        updateDraft(position.id, {
+                          stopLoss: event.target.value,
+                          error: null,
+                          success: null,
+                        })
+                      }
+                      placeholder="Empty = clear"
+                      style={inputStyle}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor={`tp-${position.id}`} style={labelStyle}>
+                      Take Profit
+                    </label>
+                    <input
+                      id={`tp-${position.id}`}
+                      value={draft.takeProfit}
+                      onChange={(event) =>
+                        updateDraft(position.id, {
+                          takeProfit: event.target.value,
+                          error: null,
+                          success: null,
+                        })
+                      }
+                      placeholder="Empty = clear"
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+
+                {draft.error ? (
+                  <p style={{ ...dangerTextStyle, margin: '6px 0' }}>
+                    {draft.error}
+                  </p>
+                ) : null}
+
+                {draft.success ? (
+                  <p style={{ ...successTextStyle, margin: '6px 0' }}>
+                    {draft.success}
+                  </p>
+                ) : null}
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => void handleSave(position.id)}
+                    disabled={draft.isSaving}
+                    style={{
+                      ...withDisabled(buttonPrimaryStyle, draft.isSaving),
+                      borderRadius: 8,
+                    }}
+                  >
+                    {draft.isSaving ? 'Saving...' : 'Save risk'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleClear(position.id)}
+                    disabled={draft.isSaving}
+                    style={{
+                      ...withDisabled(buttonSecondaryStyle, draft.isSaving),
+                      borderRadius: 8,
+                    }}
+                  >
+                    Clear inputs
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
