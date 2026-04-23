@@ -5,6 +5,15 @@ type BinancePriceResponse = {
   price: string;
 };
 
+type BinanceExchangeInfoResponse = {
+  symbols: Array<{
+    symbol: string;
+    status: string;
+    baseAsset: string;
+    quoteAsset: string;
+  }>;
+};
+
 type BinanceKlineRow = [
   number,
   string,
@@ -63,13 +72,46 @@ export class MarketService {
     };
   }
 
-  async getKlines(symbol: string, interval: string, limit = 100) {
+  async getTradableSymbols() {
+    const url = new URL('/api/v3/exchangeInfo', this.baseUrl);
+
+    const response = await fetch(url.toString());
+
+    if (!response.ok) {
+      throw new BadRequestException('Failed to fetch symbols list');
+    }
+
+    const data = (await response.json()) as BinanceExchangeInfoResponse;
+
+    if (!Array.isArray(data?.symbols)) {
+      throw new BadRequestException('Invalid exchange info response');
+    }
+
+    const items = data.symbols
+      .filter((item) => item.quoteAsset === 'USDT' && item.status === 'TRADING')
+      .map((item) => item.baseAsset)
+      .filter((value, index, array) => array.indexOf(value) === index)
+      .sort();
+
+    return { items };
+  }
+
+  async getKlines(
+    symbol: string,
+    interval: string,
+    limit = 100,
+    endTime?: number,
+  ) {
     const normalizedSymbol = symbol.toUpperCase();
 
     const url = new URL('/api/v3/klines', this.baseUrl);
     url.searchParams.set('symbol', normalizedSymbol);
     url.searchParams.set('interval', interval);
     url.searchParams.set('limit', String(limit));
+
+    if (endTime) {
+      url.searchParams.set('endTime', String(endTime));
+    }
 
     const response = await fetch(url.toString());
 

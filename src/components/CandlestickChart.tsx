@@ -4,6 +4,7 @@ import { CandlestickController, CandlestickElement } from "chartjs-chart-financi
 import zoomPlugin from "chartjs-plugin-zoom";
 import "chartjs-adapter-date-fns";
 import axios from "axios";
+import { getMarketKlines, getMarketSymbols } from "../api/market.api";
 
 import {
   detectCandlePatterns,
@@ -119,23 +120,17 @@ export default function CandlestickChart({
   });
 
   useEffect(() => {
-    async function fetchSymbols() {
-      try {
-        const res = await axios.get("https://api.binance.com/api/v3/exchangeInfo");
-        const pairs = res.data.symbols
-          .filter((s: any) => s.quoteAsset === "USDT" && s.status === "TRADING")
-          .map((s: any) => s.baseAsset)
-          .filter((v: string, i: number, arr: string[]) => arr.indexOf(v) === i)
-          .sort();
-
-        setSymbolsList(pairs);
-      } catch {
-        setSymbolsList(["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE"]);
-      }
+  async function fetchSymbols() {
+    try {
+      const response = await getMarketSymbols();
+      setSymbolsList(response.items);
+    } catch {
+      setSymbolsList(["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE"]);
     }
+  }
 
-    void fetchSymbols();
-  }, []);
+  void fetchSymbols();
+}, []);
 
   const setInitialView = (candles: Candle[]) => {
     if (candles.length === 0) return;
@@ -149,92 +144,85 @@ export default function CandlestickChart({
   };
 
   const fetchHistoricalData = async (
-    selectedInterval: string,
-    endTime: number | null = null,
-    limit = 500,
-  ) => {
-    try {
-      if (!endTime) {
-        setErrorMsg(null);
-      }
-
-      const params: Record<string, string | number> = {
-        symbol: `${symbol}USDT`,
-        interval: selectedInterval,
-        limit,
-      };
-
-      if (endTime) {
-        params.endTime = endTime;
-      }
-
-      const response = await axios.get("https://api.binance.com/api/v3/klines", {
-        params,
-      });
-
-      if (!response.data || response.data.length === 0) {
-        if (!endTime) {
-          setErrorMsg("Дані для цієї пари відсутні.");
-        }
-        return;
-      }
-
-      const formatted: Candle[] = response.data.map((d: any) => ({
-        x: d[0],
-        o: parseFloat(d[1]),
-        h: parseFloat(d[2]),
-        l: parseFloat(d[3]),
-        c: parseFloat(d[4]),
-        v: parseFloat(d[5]),
-      }));
-
-      const volumeFormatted: Volume[] = response.data.map((d: any) => ({
-        x: d[0],
-        y: parseFloat(d[5]),
-      }));
-
-      setData((prevData) => {
-        const all = endTime ? [...formatted, ...prevData] : formatted;
-        const uniqueMap = new Map<number, Candle>();
-
-        for (const candle of all) {
-          uniqueMap.set(candle.x, candle);
-        }
-
-        const uniqueArr = Array.from(uniqueMap.values()).sort((a, b) => a.x - b.x);
-
-        if (uniqueArr.length > 0) {
-          loadedRange.current.min = uniqueArr[0].x;
-          loadedRange.current.max = uniqueArr[uniqueArr.length - 1].x;
-
-          if (!endTime) {
-            setInitialView(uniqueArr);
-          }
-        }
-
-        return uniqueArr;
-      });
-
-      setVolumeData((prevVolume) => {
-        const allVol = endTime ? [...volumeFormatted, ...prevVolume] : volumeFormatted;
-        const uniqueVolMap = new Map<number, Volume>();
-
-        for (const vol of allVol) {
-          uniqueVolMap.set(vol.x, vol);
-        }
-
-        return Array.from(uniqueVolMap.values()).sort((a, b) => a.x - b.x);
-      });
-    } catch (err) {
-      console.error("Помилка завантаження даних:", err);
-      if (!endTime) {
-        setErrorMsg("Помилка з'єднання з Binance API.");
-      }
-    } finally {
-      loadingOlder.current = false;
-      setIsLoading(false);
+  selectedInterval: string,
+  endTime: number | null = null,
+  limit = 500,
+) => {
+  try {
+    if (!endTime) {
+      setErrorMsg(null);
     }
-  };
+
+    const response = await getMarketKlines(
+      `${symbol}USDT`,
+      selectedInterval,
+      limit,
+      endTime ?? undefined,
+    );
+
+    if (!response || response.length === 0) {
+      if (!endTime) {
+        setErrorMsg("Дані для цієї пари відсутні.");
+      }
+      return;
+    }
+
+    const formatted: Candle[] = response.map((d) => ({
+      x: d.openTime,
+      o: d.open,
+      h: d.high,
+      l: d.low,
+      c: d.close,
+      v: d.volume,
+    }));
+
+    const volumeFormatted: Volume[] = response.map((d) => ({
+      x: d.openTime,
+      y: d.volume,
+    }));
+
+    setData((prevData) => {
+      const all = endTime ? [...formatted, ...prevData] : formatted;
+      const uniqueMap = new Map<number, Candle>();
+
+      for (const candle of all) {
+        uniqueMap.set(candle.x, candle);
+      }
+
+      const uniqueArr = Array.from(uniqueMap.values()).sort((a, b) => a.x - b.x);
+
+      if (uniqueArr.length > 0) {
+        loadedRange.current.min = uniqueArr[0].x;
+        loadedRange.current.max = uniqueArr[uniqueArr.length - 1].x;
+
+        if (!endTime) {
+          setInitialView(uniqueArr);
+        }
+      }
+
+      return uniqueArr;
+    });
+
+    setVolumeData((prevVolume) => {
+      const allVol = endTime ? [...volumeFormatted, ...prevVolume] : volumeFormatted;
+      const uniqueVolMap = new Map<number, Volume>();
+
+      for (const vol of allVol) {
+        uniqueVolMap.set(vol.x, vol);
+      }
+
+      return Array.from(uniqueVolMap.values()).sort((a, b) => a.x - b.x);
+    });
+  } catch (err) {
+    console.error("Помилка завантаження даних:", err);
+    if (!endTime) {
+      setErrorMsg("Помилка завантаження market data з backend.");
+    }
+  } finally {
+    loadingOlder.current = false;
+    setIsLoading(false);
+  }
+};
 
   useEffect(() => {
     setIsLoading(true);

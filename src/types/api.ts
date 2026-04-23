@@ -61,26 +61,57 @@ export type PlaceMarketOrderInput = {
   takeProfit?: string;
 };
 
+export type PositionBase = {
+  id: string;
+  symbol: string;
+  quantity: string;
+  averageEntryPrice: string;
+  stopLoss: string | null;
+  takeProfit: string | null;
+  status: 'OPEN' | 'CLOSED';
+  openedAt: string;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OpenPositionItem = PositionBase & {
+  currentPrice: string | null;
+  currentValue: string | null;
+  investedValue: string;
+  unrealizedPnl: string | null;
+  pnlPercent: string | null;
+};
+
+export type ClosedPositionItem = PositionBase;
+
 export type OpenPositionsResponse = {
   count: number;
-  positions: Array<{
-    id: string;
-    symbol: string;
-    quantity: string;
-    averageEntryPrice: string;
-    stopLoss: string | null;
-    takeProfit: string | null;
-    status: 'OPEN' | 'CLOSED';
-    openedAt: string;
-    closedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-    currentPrice: string | null;
-    currentValue: string | null;
-    investedValue: string;
-    unrealizedPnl: string | null;
-    pnlPercent: string | null;
-  }>;
+  positions: OpenPositionItem[];
+};
+
+export type ClosedPositionsResponse = {
+  count: number;
+  positions: ClosedPositionItem[];
+};
+
+export type PositionTradeItem = {
+  id: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  quantity: string;
+  price: string;
+  realizedPnl: string | null;
+  executedAt: string;
+};
+
+export type PositionDetailsResponse = PositionBase & {
+  currentPrice: string | null;
+  currentValue: string | null;
+  investedValue: string;
+  unrealizedPnl: string | null;
+  pnlPercent: string | null;
+  trades: PositionTradeItem[];
 };
 
 export type OrdersHistoryResponse = {

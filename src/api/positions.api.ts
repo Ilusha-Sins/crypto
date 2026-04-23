@@ -1,5 +1,9 @@
 import { apiRequest } from './client';
-import type { OpenPositionsResponse } from '../types/api';
+import type {
+  ClosedPositionsResponse,
+  OpenPositionsResponse,
+  PositionDetailsResponse,
+} from '../types/api';
 
 export function getOpenPositions() {
   return apiRequest<OpenPositionsResponse>('/positions/open', {
@@ -8,13 +12,13 @@ export function getOpenPositions() {
 }
 
 export function getClosedPositions() {
-  return apiRequest<OpenPositionsResponse>('/positions/closed', {
+  return apiRequest<ClosedPositionsResponse>('/positions/closed', {
     auth: true,
   });
 }
 
 export function getPositionById(positionId: string) {
-  return apiRequest(`/positions/${positionId}`, {
+  return apiRequest<PositionDetailsResponse>(`/positions/${positionId}`, {
     auth: true,
   });
 }
