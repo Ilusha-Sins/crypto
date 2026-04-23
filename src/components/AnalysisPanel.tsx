@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getAnalysisHistory, runAnalysis } from '../api/analysis.api';
 import type { AnalysisRunResult } from '../types/api';
+import {
+  buttonPrimaryStyle,
+  buttonSecondaryStyle,
+  cardStyle,
+  dangerTextStyle,
+  inputStyle,
+  labelStyle,
+  panelPaddedStyle,
+  selectStyle,
+  subtleTextStyle,
+  withDisabled,
+} from '../styles/ui';
 
 type Props = {
   selectedSymbolFull: string;
@@ -30,6 +42,18 @@ type AnalysisHistoryResponse = {
 };
 
 const INTERVALS = ['15m', '1h', '4h', '1d'] as const;
+
+function biasColor(value?: string) {
+  if (value === 'bullish') return '#51cf66';
+  if (value === 'bearish') return '#ff6b6b';
+  return '#fff';
+}
+
+function confidenceColor(value?: string) {
+  if (value === 'high') return '#51cf66';
+  if (value === 'medium') return '#f59e0b';
+  return '#9ca3af';
+}
 
 export default function AnalysisPanel({
   selectedSymbolFull,
@@ -84,7 +108,9 @@ export default function AnalysisPanel({
 
       setHistory(response.items ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load analysis history');
+      setError(
+        err instanceof Error ? err.message : 'Failed to load analysis history',
+      );
     } finally {
       setIsHistoryLoading(false);
     }
@@ -95,15 +121,7 @@ export default function AnalysisPanel({
   }, [selectedSymbolFull, refreshKey]);
 
   return (
-    <div
-      style={{
-        border: '1px solid #2a2a2a',
-        borderRadius: 12,
-        padding: 16,
-        background: '#111',
-        color: '#fff',
-      }}
-    >
+    <div style={panelPaddedStyle}>
       <div
         style={{
           display: 'flex',
@@ -116,12 +134,16 @@ export default function AnalysisPanel({
       >
         <div>
           <h2 style={{ margin: 0 }}>AI Analysis</h2>
-          <p style={{ margin: '6px 0 0 0', opacity: 0.8 }}>
+          <p style={{ margin: '6px 0 0 0', ...subtleTextStyle }}>
             Symbol: {selectedSymbolFull}
           </p>
         </div>
 
-        <button onClick={() => void loadHistory()} disabled={isHistoryLoading}>
+        <button
+          onClick={() => void loadHistory()}
+          disabled={isHistoryLoading}
+          style={withDisabled(buttonSecondaryStyle, isHistoryLoading)}
+        >
           Refresh history
         </button>
       </div>
@@ -132,10 +154,11 @@ export default function AnalysisPanel({
           gridTemplateColumns: '1fr 1fr auto',
           gap: 12,
           marginBottom: 16,
+          alignItems: 'end',
         }}
       >
         <div>
-          <label htmlFor="analysis-interval" style={{ display: 'block', marginBottom: 6 }}>
+          <label htmlFor="analysis-interval" style={labelStyle}>
             Interval
           </label>
           <select
@@ -144,7 +167,7 @@ export default function AnalysisPanel({
             onChange={(event) =>
               setInterval(event.target.value as (typeof INTERVALS)[number])
             }
-            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+            style={selectStyle}
           >
             {INTERVALS.map((item) => (
               <option key={item} value={item}>
@@ -155,14 +178,14 @@ export default function AnalysisPanel({
         </div>
 
         <div>
-          <label htmlFor="analysis-language" style={{ display: 'block', marginBottom: 6 }}>
+          <label htmlFor="analysis-language" style={labelStyle}>
             Language
           </label>
           <select
             id="analysis-language"
             value={language}
             onChange={(event) => setLanguage(event.target.value as 'uk' | 'en')}
-            style={{ width: '100%', padding: 10, borderRadius: 8 }}
+            style={selectStyle}
           >
             <option value="uk">Ukrainian</option>
             <option value="en">English</option>
@@ -174,11 +197,7 @@ export default function AnalysisPanel({
             onClick={() => void handleRunAnalysis()}
             disabled={isRunning || !canRun}
             style={{
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 600,
+              ...withDisabled(buttonPrimaryStyle, isRunning || !canRun),
               width: '100%',
             }}
           >
@@ -190,11 +209,11 @@ export default function AnalysisPanel({
       {error ? (
         <div
           style={{
+            ...cardStyle,
             marginBottom: 16,
-            padding: 12,
-            borderRadius: 10,
-            background: '#3a1212',
-            border: '1px solid #6b1f1f',
+            background: '#1a1111',
+            borderColor: '#3f1d1d',
+            ...dangerTextStyle,
           }}
         >
           {error}
@@ -202,15 +221,7 @@ export default function AnalysisPanel({
       ) : null}
 
       {result ? (
-        <div
-          style={{
-            border: '1px solid #2a2a2a',
-            borderRadius: 12,
-            padding: 16,
-            background: '#171717',
-            marginBottom: 20,
-          }}
-        >
+        <div style={{ ...cardStyle, marginBottom: 20 }}>
           <div
             style={{
               display: 'grid',
@@ -219,19 +230,28 @@ export default function AnalysisPanel({
               marginBottom: 16,
             }}
           >
-            <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+            <div style={cardStyle}>
               <strong>Bias</strong>
-              <p style={{ margin: '6px 0 0 0' }}>{result.analysis.bias}</p>
+              <p style={{ margin: '6px 0 0 0', color: biasColor(result.analysis.bias) }}>
+                {result.analysis.bias}
+              </p>
             </div>
-            <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+            <div style={cardStyle}>
               <strong>Confidence</strong>
-              <p style={{ margin: '6px 0 0 0' }}>{result.analysis.confidence}</p>
+              <p
+                style={{
+                  margin: '6px 0 0 0',
+                  color: confidenceColor(result.analysis.confidence),
+                }}
+              >
+                {result.analysis.confidence}
+              </p>
             </div>
-            <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+            <div style={cardStyle}>
               <strong>Provider</strong>
               <p style={{ margin: '6px 0 0 0' }}>{result.analysis.provider}</p>
             </div>
-            <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+            <div style={cardStyle}>
               <strong>Interval</strong>
               <p style={{ margin: '6px 0 0 0' }}>{result.interval}</p>
             </div>
@@ -239,7 +259,9 @@ export default function AnalysisPanel({
 
           <div style={{ marginBottom: 16 }}>
             <h3 style={{ marginTop: 0 }}>Summary</h3>
-            <p style={{ marginBottom: 0, lineHeight: 1.6 }}>{result.analysis.summary}</p>
+            <p style={{ marginBottom: 0, lineHeight: 1.6 }}>
+              {result.analysis.summary}
+            </p>
           </div>
 
           <div
@@ -249,8 +271,8 @@ export default function AnalysisPanel({
               gap: 16,
             }}
           >
-            <div>
-              <h4>Key signals</h4>
+            <div style={cardStyle}>
+              <h4 style={{ marginTop: 0 }}>Key signals</h4>
               <ul style={{ paddingLeft: 18, margin: 0 }}>
                 {result.analysis.keySignals.map((item, index) => (
                   <li key={`${item}-${index}`} style={{ marginBottom: 8 }}>
@@ -260,8 +282,8 @@ export default function AnalysisPanel({
               </ul>
             </div>
 
-            <div>
-              <h4>Risks</h4>
+            <div style={cardStyle}>
+              <h4 style={{ marginTop: 0 }}>Risks</h4>
               <ul style={{ paddingLeft: 18, margin: 0 }}>
                 {result.analysis.risks.map((item, index) => (
                   <li key={`${item}-${index}`} style={{ marginBottom: 8 }}>
@@ -271,8 +293,8 @@ export default function AnalysisPanel({
               </ul>
             </div>
 
-            <div>
-              <h4>Action plan</h4>
+            <div style={cardStyle}>
+              <h4 style={{ marginTop: 0 }}>Action plan</h4>
               <ul style={{ paddingLeft: 18, margin: 0 }}>
                 {result.analysis.actionPlan.map((item, index) => (
                   <li key={`${item}-${index}`} style={{ marginBottom: 8 }}>
@@ -296,15 +318,7 @@ export default function AnalysisPanel({
 
         <div style={{ display: 'grid', gap: 12 }}>
           {history.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                border: '1px solid #2a2a2a',
-                borderRadius: 10,
-                padding: 12,
-                background: '#171717',
-              }}
-            >
+            <div key={item.id} style={cardStyle}>
               <div
                 style={{
                   display: 'flex',
@@ -317,14 +331,24 @@ export default function AnalysisPanel({
                 <strong>
                   {item.symbol} · {item.interval}
                 </strong>
-                <span style={{ opacity: 0.7 }}>
+                <span style={subtleTextStyle}>
                   {new Date(item.createdAt).toLocaleString()}
                 </span>
               </div>
 
               <p style={{ margin: '6px 0' }}>
-                Bias: {item.response.analysis?.bias ?? '—'} · Confidence:{' '}
-                {item.response.analysis?.confidence ?? '—'}
+                Bias:{' '}
+                <span style={{ color: biasColor(item.response.analysis?.bias) }}>
+                  {item.response.analysis?.bias ?? '—'}
+                </span>{' '}
+                · Confidence:{' '}
+                <span
+                  style={{
+                    color: confidenceColor(item.response.analysis?.confidence),
+                  }}
+                >
+                  {item.response.analysis?.confidence ?? '—'}
+                </span>
               </p>
 
               <p style={{ margin: '6px 0 0 0', lineHeight: 1.5 }}>

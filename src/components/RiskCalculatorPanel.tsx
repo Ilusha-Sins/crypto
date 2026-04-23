@@ -1,5 +1,11 @@
 import RiskCalculator from './RiskCalculator';
 import { useMarketPriceStream } from '../hooks/useMarketPriceStream';
+import {
+  errorBannerStyle,
+  liveBadgeStyle,
+  panelHeaderStyle,
+  panelStyle,
+} from '../styles/ui';
 
 type Props = {
   selectedSymbolFull: string;
@@ -23,24 +29,11 @@ export default function RiskCalculatorPanel({
   return (
     <div
       style={{
-        border: '1px solid #2a2a2a',
-        borderRadius: 12,
+        ...panelStyle,
         overflow: 'hidden',
-        background: '#111',
       }}
     >
-      <div
-        style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid #2a2a2a',
-          color: '#fff',
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 12,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div style={panelHeaderStyle}>
         <strong>{selectedSymbolFull}</strong>
 
         <div style={{ fontSize: 13, opacity: 0.9 }}>
@@ -50,36 +43,11 @@ export default function RiskCalculatorPanel({
             : currentPrice > 0
               ? currentPrice
               : '—'}{' '}
-          {isLive ? (
-            <span
-              style={{
-                marginLeft: 6,
-                padding: '2px 8px',
-                borderRadius: 999,
-                background: 'rgba(37, 99, 235, 0.18)',
-                color: '#93c5fd',
-                fontWeight: 700,
-              }}
-            >
-              LIVE
-            </span>
-          ) : null}
+          {isLive ? <span style={liveBadgeStyle}>LIVE</span> : null}
         </div>
       </div>
 
-      {error ? (
-        <div
-          style={{
-            padding: '10px 16px',
-            borderBottom: '1px solid #2a2a2a',
-            color: '#ff6b6b',
-            background: '#1a1111',
-            fontSize: 13,
-          }}
-        >
-          {error}
-        </div>
-      ) : null}
+      {error ? <div style={errorBannerStyle}>{error}</div> : null}
 
       <RiskCalculator currentPrice={currentPrice} />
     </div>

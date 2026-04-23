@@ -2,6 +2,18 @@ import { useEffect, useState } from 'react';
 import { createMarketStreamUrl } from '../api/market.api';
 import { updatePositionRisk } from '../api/positions.api';
 import type { OpenPositionsResponse } from '../types/api';
+import {
+  buttonPrimaryStyle,
+  buttonSecondaryStyle,
+  cardStyle,
+  dangerTextStyle,
+  inputStyle,
+  labelStyle,
+  liveBadgeStyle,
+  panelPaddedStyle,
+  successTextStyle,
+  withDisabled,
+} from '../styles/ui';
 
 type Props = {
   data: OpenPositionsResponse | null;
@@ -197,7 +209,7 @@ export default function PositionsPanel({
       };
 
       source.onerror = () => {
-        // EventSource will try to reconnect automatically.
+        // EventSource reconnects automatically.
       };
 
       return source;
@@ -270,15 +282,7 @@ export default function PositionsPanel({
   }
 
   return (
-    <div
-      style={{
-        border: '1px solid #2a2a2a',
-        borderRadius: 12,
-        padding: 16,
-        background: '#111',
-        color: '#fff',
-      }}
-    >
+    <div style={panelPaddedStyle}>
       <h2 style={{ marginTop: 0 }}>Open Positions</h2>
 
       {isLoading ? <p>Loading positions...</p> : null}
@@ -303,15 +307,7 @@ export default function PositionsPanel({
           );
 
           return (
-            <div
-              key={position.id}
-              style={{
-                border: '1px solid #2a2a2a',
-                borderRadius: 10,
-                padding: 12,
-                background: '#171717',
-              }}
-            >
+            <div key={position.id} style={cardStyle}>
               <strong>{position.symbol}</strong>
               <p style={{ margin: '6px 0' }}>Quantity: {position.quantity}</p>
               <p style={{ margin: '6px 0' }}>
@@ -320,23 +316,7 @@ export default function PositionsPanel({
 
               <p style={{ margin: '6px 0' }}>
                 Current price: {metrics.currentPrice ?? '—'}{' '}
-                {metrics.isLive ? (
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      marginLeft: 8,
-                      padding: '2px 8px',
-                      borderRadius: 999,
-                      background: 'rgba(37, 99, 235, 0.18)',
-                      color: '#93c5fd',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      letterSpacing: 0.3,
-                    }}
-                  >
-                    LIVE
-                  </span>
-                ) : null}
+                {metrics.isLive ? <span style={liveBadgeStyle}>LIVE</span> : null}
               </p>
 
               <p style={{ margin: '6px 0' }}>
@@ -377,10 +357,7 @@ export default function PositionsPanel({
                 }}
               >
                 <div>
-                  <label
-                    htmlFor={`sl-${position.id}`}
-                    style={{ display: 'block', marginBottom: 6 }}
-                  >
+                  <label htmlFor={`sl-${position.id}`} style={labelStyle}>
                     Stop Loss
                   </label>
                   <input
@@ -394,22 +371,12 @@ export default function PositionsPanel({
                       })
                     }
                     placeholder="Empty = clear"
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #2a2a2a',
-                      background: '#111',
-                      color: '#fff',
-                    }}
+                    style={inputStyle}
                   />
                 </div>
 
                 <div>
-                  <label
-                    htmlFor={`tp-${position.id}`}
-                    style={{ display: 'block', marginBottom: 6 }}
-                  >
+                  <label htmlFor={`tp-${position.id}`} style={labelStyle}>
                     Take Profit
                   </label>
                   <input
@@ -423,24 +390,21 @@ export default function PositionsPanel({
                       })
                     }
                     placeholder="Empty = clear"
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #2a2a2a',
-                      background: '#111',
-                      color: '#fff',
-                    }}
+                    style={inputStyle}
                   />
                 </div>
               </div>
 
               {draft.error ? (
-                <p style={{ color: '#ff6b6b', margin: '6px 0' }}>{draft.error}</p>
+                <p style={{ ...dangerTextStyle, margin: '6px 0' }}>
+                  {draft.error}
+                </p>
               ) : null}
 
               {draft.success ? (
-                <p style={{ color: '#51cf66', margin: '6px 0' }}>{draft.success}</p>
+                <p style={{ ...successTextStyle, margin: '6px 0' }}>
+                  {draft.success}
+                </p>
               ) : null}
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -448,13 +412,8 @@ export default function PositionsPanel({
                   onClick={() => void handleSave(position.id)}
                   disabled={draft.isSaving}
                   style={{
-                    padding: '10px 14px',
+                    ...withDisabled(buttonPrimaryStyle, draft.isSaving),
                     borderRadius: 8,
-                    border: '1px solid #2a2a2a',
-                    background: '#2563eb',
-                    color: '#fff',
-                    cursor: draft.isSaving ? 'not-allowed' : 'pointer',
-                    opacity: draft.isSaving ? 0.6 : 1,
                   }}
                 >
                   {draft.isSaving ? 'Saving...' : 'Save risk'}
@@ -465,13 +424,8 @@ export default function PositionsPanel({
                   onClick={() => handleClear(position.id)}
                   disabled={draft.isSaving}
                   style={{
-                    padding: '10px 14px',
+                    ...withDisabled(buttonSecondaryStyle, draft.isSaving),
                     borderRadius: 8,
-                    border: '1px solid #2a2a2a',
-                    background: '#111',
-                    color: '#fff',
-                    cursor: draft.isSaving ? 'not-allowed' : 'pointer',
-                    opacity: draft.isSaving ? 0.6 : 1,
                   }}
                 >
                   Clear inputs

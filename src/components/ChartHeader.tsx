@@ -1,5 +1,13 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import {
+  buttonSecondaryStyle,
+  cardStyle,
+  inputStyle,
+  liveBadgeStyle,
+  panelPaddedStyle,
+  subtleTextStyle,
+} from '../styles/ui';
 
 interface ChartHeaderProps {
   symbol: string;
@@ -7,7 +15,14 @@ interface ChartHeaderProps {
   interval: string;
   setInterval: (i: string) => void;
   overlays: { sma: boolean; ema: boolean; bb: boolean; patterns: boolean };
-  setOverlays: React.Dispatch<React.SetStateAction<{ sma: boolean; ema: boolean; bb: boolean; patterns: boolean }>>;
+  setOverlays: React.Dispatch<
+    React.SetStateAction<{
+      sma: boolean;
+      ema: boolean;
+      bb: boolean;
+      patterns: boolean;
+    }>
+  >;
   symbolsList: string[];
 }
 
@@ -15,212 +30,397 @@ interface TickerStats {
   priceChangePercent: string;
   highPrice: string;
   lowPrice: string;
-  quoteVolume: string; 
+  quoteVolume: string;
   lastPrice: string;
 }
 
-const ChartHeader = ({
+const INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'] as const;
+
+function formatVol(val: string) {
+  const num = parseFloat(val);
+  if (num > 1_000_000_000) return `${(num / 1_000_000_000).toFixed(2)}B`;
+  if (num > 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num > 1_000) return `${(num / 1_000).toFixed(2)}K`;
+  return num.toFixed(2);
+}
+
+function formatPrice(val: string | number) {
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (Number.isNaN(num)) return '—';
+  if (num === 0) return '0.00';
+  if (num < 1) return num.toFixed(4);
+  if (num < 10) return num.toFixed(3);
+  return num.toFixed(2);
+}
+
+function ToggleButton({
+  active,
+  label,
+  activeColor,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  activeColor: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 10px',
+        borderRadius: 8,
+        border: '1px solid #2a2a2a',
+        background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
+        color: active ? activeColor : '#9ca3af',
+        cursor: 'pointer',
+        fontSize: 12,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function IntervalButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 10px',
+        borderRadius: 8,
+        border: '1px solid #2a2a2a',
+        background: active ? 'rgba(37, 99, 235, 0.18)' : 'transparent',
+        color: active ? '#93c5fd' : '#9ca3af',
+        cursor: 'pointer',
+        fontSize: 13,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function ChartHeader({
   symbol,
   setSymbol,
   interval,
-  setInterval: setTimeInterval, 
+  setInterval: setTimeInterval,
   overlays,
   setOverlays,
   symbolsList,
-}: ChartHeaderProps) => {
-  const [search, setSearch] = useState("");
+}: ChartHeaderProps) {
+  const [search, setSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [stats, setStats] = useState<TickerStats | null>(null);
 
-  const filteredSymbols = symbolsList.filter((sym) =>
-    sym.toLowerCase().includes(search.toLowerCase())
+  const filteredSymbols = useMemo(
+    () =>
+      symbolsList.filter((sym) =>
+        sym.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [search, symbolsList],
   );
 
-  // Fetch 24h Stats
   useEffect(() => {
     const fetchStats = async () => {
-        try {
-            const res = await axios.get("https://api.binance.com/api/v3/ticker/24hr", {
-                params: { symbol: symbol + "USDT" }
-            });
-            setStats(res.data);
-        } catch (e) {
-            console.error("Stats fetch error", e);
-        }
+      try {
+        const res = await axios.get('https://api.binance.com/api/v3/ticker/24hr', {
+          params: { symbol: `${symbol}USDT` },
+        });
+        setStats(res.data);
+      } catch (error) {
+        console.error('Stats fetch error', error);
+      }
     };
-    fetchStats();
-    
-    const timerId = window.setInterval(fetchStats, 5000); 
+
+    void fetchStats();
+    const timerId = window.setInterval(fetchStats, 5000);
     return () => clearInterval(timerId);
   }, [symbol]);
 
-  const formatVol = (val: string) => {
-      const num = parseFloat(val);
-      if (num > 1000000000) return (num / 1000000000).toFixed(2) + "B";
-      if (num > 1000000) return (num / 1000000).toFixed(2) + "M";
-      if (num > 1000) return (num / 1000).toFixed(2) + "K";
-      return num.toFixed(2);
-  };
-
-  const formatPrice = (val: string | number) => {
-      const num = typeof val === 'string' ? parseFloat(val) : val;
-      if (isNaN(num)) return "—";
-      if (num === 0) return "0.00";
-      if (num < 1) return num.toFixed(4);
-      if (num < 10) return num.toFixed(3);
-      return num.toFixed(2);
-  };
+  const isPositive = stats ? parseFloat(stats.priceChangePercent) >= 0 : false;
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col gap-4 z-20 relative">
-      
-      {/* Top Row: Search + Stats + Controls */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-        
-        {/* Search & Symbol Info */}
-        <div className="flex flex-col lg:flex-row gap-4 w-full xl:w-auto items-start lg:items-center">
-            <div className="relative w-full sm:w-64 z-30 shrink-0">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path
+    <div style={{ ...panelPaddedStyle, position: 'relative', zIndex: 20 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              flex: 1,
+              minWidth: 320,
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                maxWidth: 280,
+                zIndex: 30,
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '0 auto 0 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  pointerEvents: 'none',
+                  color: '#6b7280',
+                }}
+              >
+                <svg
+                  style={{ width: 18, height: 18 }}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
                     fillRule="evenodd"
                     d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
                     clipRule="evenodd"
-                    />
+                  />
                 </svg>
-                </div>
-                <input
+              </div>
+
+              <input
                 type="text"
                 placeholder="Пошук (напр. BTC)"
                 value={search}
-                onChange={(e) => {
-                    setSearch(e.target.value);
-                    setShowSuggestions(true);
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setShowSuggestions(true);
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold text-gray-700"
-                />
-                {showSuggestions && filteredSymbols.length > 0 && (
-                <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto mt-2">
-                    {filteredSymbols.map((sym) => (
+                style={{
+                  ...inputStyle,
+                  paddingLeft: 38,
+                  fontWeight: 700,
+                }}
+              />
+
+              {showSuggestions && filteredSymbols.length > 0 ? (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    left: 0,
+                    width: '100%',
+                    background: '#111',
+                    border: '1px solid #2a2a2a',
+                    borderRadius: 12,
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.35)',
+                    maxHeight: 240,
+                    overflowY: 'auto',
+                  }}
+                >
+                  {filteredSymbols.map((sym) => (
                     <div
-                        key={sym}
-                        onMouseDown={() => {
+                      key={sym}
+                      onMouseDown={() => {
                         setSymbol(sym);
                         setSearch(sym);
                         setShowSuggestions(false);
-                        }}
-                        className={`px-4 py-2 cursor-pointer hover:bg-blue-50 flex justify-between items-center ${
-                        sym === symbol ? "bg-blue-50 text-blue-700" : "text-gray-700"
-                        }`}
+                      }}
+                      style={{
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        color: sym === symbol ? '#93c5fd' : '#e5e7eb',
+                        background:
+                          sym === symbol ? 'rgba(37, 99, 235, 0.12)' : 'transparent',
+                        borderBottom: '1px solid #1b1b1b',
+                      }}
                     >
-                        <span>{sym}</span>
-                        <span className="text-xs text-gray-400">USDT</span>
+                      <span>{sym}</span>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>USDT</span>
                     </div>
-                    ))}
+                  ))}
                 </div>
-                )}
+              ) : null}
             </div>
 
-            {/* Ticker Stats Display */}
-            {stats && (
-                <div className="grid grid-cols-2 sm:flex sm:flex-row gap-x-6 gap-y-3 text-xs sm:text-sm items-center w-full lg:w-auto">
-                    <div className="flex flex-col whitespace-nowrap">
-                        <span className="text-gray-400 text-[10px] uppercase">Ціна</span>
-                        <span className={`font-bold text-lg ${parseFloat(stats.priceChangePercent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatPrice(stats.lastPrice)}
-                        </span>
-                    </div>
-                    <div className="flex flex-col whitespace-nowrap">
-                        <span className="text-gray-400 text-[10px] uppercase">Зміна 24h</span>
-                        <span className={`font-medium ${parseFloat(stats.priceChangePercent) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {parseFloat(stats.priceChangePercent) >= 0 ? '+' : ''}{stats.priceChangePercent}%
-                        </span>
-                    </div>
-                    <div className="flex flex-col sm:border-l sm:border-gray-200 sm:pl-3 whitespace-nowrap">
-                        <span className="text-gray-400 text-[10px] uppercase">24h High</span>
-                        <span className="font-medium text-gray-700">{formatPrice(stats.highPrice)}</span>
-                    </div>
-                    <div className="flex flex-col whitespace-nowrap">
-                        <span className="text-gray-400 text-[10px] uppercase">24h Low</span>
-                        <span className="font-medium text-gray-700">{formatPrice(stats.lowPrice)}</span>
-                    </div>
-                    <div className="flex flex-col sm:border-l sm:border-gray-200 sm:pl-3 whitespace-nowrap col-span-2 sm:col-span-1">
-                        <span className="text-gray-400 text-[10px] uppercase">24h Vol (USDT)</span>
-                        <span className="font-medium text-gray-700">{formatVol(stats.quoteVolume)}</span>
-                    </div>
+            {stats ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    Ціна
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 22,
+                      color: isPositive ? '#4ade80' : '#f87171',
+                    }}
+                  >
+                    {formatPrice(stats.lastPrice)}
+                  </div>
                 </div>
+
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    Зміна 24h
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      color: isPositive ? '#4ade80' : '#f87171',
+                    }}
+                  >
+                    {isPositive ? '+' : ''}
+                    {stats.priceChangePercent}%
+                  </div>
+                </div>
+
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    24h High
+                  </div>
+                  <div style={{ fontWeight: 700 }}>{formatPrice(stats.highPrice)}</div>
+                </div>
+
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    24h Low
+                  </div>
+                  <div style={{ fontWeight: 700 }}>{formatPrice(stats.lowPrice)}</div>
+                </div>
+
+                <div style={cardStyle}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    24h Vol
+                  </div>
+                  <div style={{ fontWeight: 700 }}>{formatVol(stats.quoteVolume)}</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ ...subtleTextStyle, fontSize: 13 }}>Loading market stats...</div>
             )}
-        </div>
+          </div>
 
-        {/* Controls */}
-        <div className="flex flex-wrap gap-2 items-center w-full xl:w-auto justify-start xl:justify-end">
-            <div className="flex bg-gray-100 p-1 rounded-lg shrink-0">
-            <button
-                onClick={() => setOverlays((p) => ({ ...p, sma: !p.sma }))}
-                className={`px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-semibold rounded transition-all ${
-                overlays.sma
-                    ? "bg-white text-yellow-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              alignItems: 'flex-start',
+              minWidth: 320,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                padding: 4,
+                borderRadius: 10,
+                background: '#171717',
+                border: '1px solid #2a2a2a',
+              }}
             >
-                SMA
-            </button>
-            <button
-                onClick={() => setOverlays((p) => ({ ...p, ema: !p.ema }))}
-                className={`px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-semibold rounded transition-all ${
-                overlays.ema
-                    ? "bg-white text-purple-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-            >
-                EMA
-            </button>
-            <button
-                onClick={() => setOverlays((p) => ({ ...p, bb: !p.bb }))}
-                className={`px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-semibold rounded transition-all ${
-                overlays.bb
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-            >
-                BB
-            </button>
-            <div className="w-px bg-gray-300 mx-1 h-4 self-center"></div>
-            <button
-                onClick={() => setOverlays((p) => ({ ...p, patterns: !p.patterns }))}
-                className={`px-2 md:px-3 py-1.5 text-[10px] md:text-xs font-semibold rounded transition-all flex items-center gap-1 ${
-                overlays.patterns
-                    ? "bg-white text-red-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-            >
-                <span>Патерни</span>
-            </button>
+              <ToggleButton
+                active={overlays.sma}
+                label="SMA"
+                activeColor="#fbbf24"
+                onClick={() => setOverlays((prev) => ({ ...prev, sma: !prev.sma }))}
+              />
+              <ToggleButton
+                active={overlays.ema}
+                label="EMA"
+                activeColor="#c084fc"
+                onClick={() => setOverlays((prev) => ({ ...prev, ema: !prev.ema }))}
+              />
+              <ToggleButton
+                active={overlays.bb}
+                label="BB"
+                activeColor="#93c5fd"
+                onClick={() => setOverlays((prev) => ({ ...prev, bb: !prev.bb }))}
+              />
+              <div
+                style={{
+                  width: 1,
+                  background: '#2a2a2a',
+                  margin: '0 4px',
+                }}
+              />
+              <ToggleButton
+                active={overlays.patterns}
+                label="Патерни"
+                activeColor="#f87171"
+                onClick={() =>
+                  setOverlays((prev) => ({ ...prev, patterns: !prev.patterns }))
+                }
+              />
             </div>
 
-            <div className="h-6 w-px bg-gray-300 mx-1 hidden md:block"></div>
-
-            <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto no-scrollbar max-w-full">
-            {["1m", "5m", "15m", "1h", "4h", "1d", "1w"].map((intv) => (
-                <button
-                key={intv}
-                onClick={() => setTimeInterval(intv)}
-                className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-medium transition-all whitespace-nowrap ${
-                    interval === intv
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-                >
-                {intv}
-                </button>
-            ))}
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                padding: 4,
+                borderRadius: 10,
+                background: '#171717',
+                border: '1px solid #2a2a2a',
+                maxWidth: '100%',
+                overflowX: 'auto',
+              }}
+            >
+              {INTERVALS.map((intv) => (
+                <IntervalButton
+                  key={intv}
+                  active={interval === intv}
+                  label={intv}
+                  onClick={() => setTimeInterval(intv)}
+                />
+              ))}
             </div>
+
+            <div style={{ fontSize: 13 }}>
+              <span style={{ color: '#9ca3af' }}>Active symbol:</span>{' '}
+              <strong>{symbol}USDT</strong>
+              <span style={liveBadgeStyle}>LIVE</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default ChartHeader;
+}

@@ -1,6 +1,17 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { placeMarketOrder } from '../api/orders.api';
 import { useMarketPriceStream } from '../hooks/useMarketPriceStream';
+import {
+  buttonPrimaryStyle,
+  dangerTextStyle,
+  inputStyle,
+  labelStyle,
+  liveBadgeStyle,
+  panelPaddedStyle,
+  selectStyle,
+  successTextStyle,
+  withDisabled,
+} from '../styles/ui';
 
 type Props = {
   selectedSymbol: string;
@@ -9,24 +20,6 @@ type Props = {
 };
 
 type Side = 'BUY' | 'SELL';
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: 10,
-  borderRadius: 8,
-  border: '1px solid #2a2a2a',
-  background: '#171717',
-  color: '#fff',
-};
-
-const selectStyle: React.CSSProperties = {
-  width: '100%',
-  padding: 10,
-  borderRadius: 8,
-  border: '1px solid #2a2a2a',
-  background: '#171717',
-  color: '#fff',
-};
 
 export default function TradingPanel({
   selectedSymbol,
@@ -111,20 +104,12 @@ export default function TradingPanel({
   }
 
   return (
-    <div
-      style={{
-        border: '1px solid #2a2a2a',
-        borderRadius: 12,
-        padding: 16,
-        background: '#111',
-        color: '#fff',
-      }}
-    >
+    <div style={panelPaddedStyle}>
       <h2 style={{ marginTop: 0 }}>Trading Panel</h2>
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 12 }}>
-          <label htmlFor="symbol" style={{ display: 'block', marginBottom: 6 }}>
+          <label htmlFor="symbol" style={labelStyle}>
             Symbol
           </label>
           <input
@@ -149,31 +134,14 @@ export default function TradingPanel({
             <small>Order symbol: {normalizedFullSymbol}</small>
             <small>
               Live price:{' '}
-              {isPriceLoading
-                ? 'Loading...'
-                : livePrice > 0
-                  ? livePrice
-                  : '—'}{' '}
-              {isLive ? (
-                <span
-                  style={{
-                    marginLeft: 6,
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    background: 'rgba(37, 99, 235, 0.18)',
-                    color: '#93c5fd',
-                    fontWeight: 700,
-                  }}
-                >
-                  LIVE
-                </span>
-              ) : null}
+              {isPriceLoading ? 'Loading...' : livePrice > 0 ? livePrice : '—'}{' '}
+              {isLive ? <span style={liveBadgeStyle}>LIVE</span> : null}
             </small>
           </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label htmlFor="side" style={{ display: 'block', marginBottom: 6 }}>
+          <label htmlFor="side" style={labelStyle}>
             Side
           </label>
           <select
@@ -188,7 +156,7 @@ export default function TradingPanel({
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label htmlFor="quantity" style={{ display: 'block', marginBottom: 6 }}>
+          <label htmlFor="quantity" style={labelStyle}>
             Quantity
           </label>
           <input
@@ -207,10 +175,7 @@ export default function TradingPanel({
         {side === 'BUY' ? (
           <>
             <div style={{ marginBottom: 12 }}>
-              <label
-                htmlFor="stopLoss"
-                style={{ display: 'block', marginBottom: 6 }}
-              >
+              <label htmlFor="stopLoss" style={labelStyle}>
                 Stop Loss
               </label>
               <input
@@ -223,10 +188,7 @@ export default function TradingPanel({
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label
-                htmlFor="takeProfit"
-                style={{ display: 'block', marginBottom: 6 }}
-              >
+              <label htmlFor="takeProfit" style={labelStyle}>
                 Take Profit
               </label>
               <input
@@ -240,24 +202,23 @@ export default function TradingPanel({
           </>
         ) : null}
 
-        {error ? <p style={{ color: '#ff6b6b', marginBottom: 12 }}>{error}</p> : null}
+        {error ? (
+          <p style={{ ...dangerTextStyle, marginBottom: 12 }}>{error}</p>
+        ) : null}
         {successMessage ? (
-          <p style={{ color: '#51cf66', marginBottom: 12 }}>{successMessage}</p>
+          <p style={{ ...successTextStyle, marginBottom: 12 }}>
+            {successMessage}
+          </p>
         ) : null}
 
         <button
           type="submit"
           disabled={isSubmitting}
           style={{
+            ...withDisabled(buttonPrimaryStyle, isSubmitting),
             width: '100%',
             padding: 12,
             borderRadius: 8,
-            border: '1px solid #2a2a2a',
-            background: '#2563eb',
-            color: '#fff',
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-            fontWeight: 600,
-            opacity: isSubmitting ? 0.6 : 1,
           }}
         >
           {isSubmitting ? 'Submitting...' : `Execute ${side}`}

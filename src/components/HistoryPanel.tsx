@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getOrdersHistory,
   getTradesHistory,
@@ -9,6 +9,19 @@ import type {
   TradesHistoryResponse,
   TradingSummary,
 } from '../types/api';
+import {
+  buttonPrimaryStyle,
+  buttonSecondaryStyle,
+  cardStyle,
+  dangerTextStyle,
+  inputStyle,
+  labelStyle,
+  makeTabButtonStyle,
+  panelPaddedStyle,
+  selectStyle,
+  subtleTextStyle,
+  withDisabled,
+} from '../styles/ui';
 
 type Props = {
   selectedSymbolFull: string;
@@ -17,47 +30,6 @@ type Props = {
 
 type SideFilter = '' | 'BUY' | 'SELL';
 type ActiveTab = 'trades' | 'rejectedOrders';
-
-const inputStyle: CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid #2a2a2a',
-  background: '#171717',
-  color: '#fff',
-  outline: 'none',
-};
-
-const selectStyle: CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid #2a2a2a',
-  background: '#171717',
-  color: '#fff',
-  outline: 'none',
-  appearance: 'none',
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 10,
-  border: '1px solid #2a2a2a',
-  background: '#171717',
-  color: '#fff',
-  cursor: 'pointer',
-  fontWeight: 600,
-};
-
-const primaryButtonStyle: CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 10,
-  border: '1px solid #2a2a2a',
-  background: '#2563eb',
-  color: '#fff',
-  cursor: 'pointer',
-  fontWeight: 600,
-};
 
 function buildQuery(params: Record<string, string | number | undefined>) {
   const searchParams = new URLSearchParams();
@@ -107,11 +79,7 @@ function PaginationControls({
       <button
         onClick={onPrev}
         disabled={isLoading || page <= 1}
-        style={{
-          ...secondaryButtonStyle,
-          opacity: isLoading || page <= 1 ? 0.5 : 1,
-          cursor: isLoading || page <= 1 ? 'not-allowed' : 'pointer',
-        }}
+        style={withDisabled(buttonSecondaryStyle, isLoading || page <= 1)}
       >
         Previous
       </button>
@@ -123,15 +91,10 @@ function PaginationControls({
       <button
         onClick={onNext}
         disabled={isLoading || totalPages === 0 || page >= totalPages}
-        style={{
-          ...secondaryButtonStyle,
-          opacity:
-            isLoading || totalPages === 0 || page >= totalPages ? 0.5 : 1,
-          cursor:
-            isLoading || totalPages === 0 || page >= totalPages
-              ? 'not-allowed'
-              : 'pointer',
-        }}
+        style={withDisabled(
+          buttonSecondaryStyle,
+          isLoading || totalPages === 0 || page >= totalPages,
+        )}
       >
         Next
       </button>
@@ -281,22 +244,11 @@ export default function HistoryPanel({
     void loadSummary();
   }, [refreshKey]);
 
-  const tabButtonStyle = (tab: ActiveTab): CSSProperties => ({
-    ...secondaryButtonStyle,
-    background: activeTab === tab ? '#1f1f1f' : '#111',
-    borderColor: activeTab === tab ? '#3a3a3a' : '#2a2a2a',
-  });
+  const tabButtonStyle = (tab: ActiveTab) =>
+    makeTabButtonStyle(activeTab === tab);
 
   return (
-    <div
-      style={{
-        border: '1px solid #2a2a2a',
-        borderRadius: 12,
-        padding: 16,
-        background: '#111',
-        color: '#fff',
-      }}
-    >
+    <div style={panelPaddedStyle}>
       <div
         style={{
           display: 'flex',
@@ -309,7 +261,7 @@ export default function HistoryPanel({
       >
         <div>
           <h2 style={{ margin: 0 }}>History</h2>
-          <p style={{ margin: '6px 0 0 0', opacity: 0.75 }}>
+          <p style={{ margin: '6px 0 0 0', ...subtleTextStyle }}>
             Trades = executed actions, Rejected Orders = failed submissions
           </p>
         </div>
@@ -317,15 +269,10 @@ export default function HistoryPanel({
         <button
           onClick={() => void handleRefreshAll()}
           disabled={isOrdersLoading || isTradesLoading || isSummaryLoading}
-          style={{
-            ...secondaryButtonStyle,
-            opacity:
-              isOrdersLoading || isTradesLoading || isSummaryLoading ? 0.5 : 1,
-            cursor:
-              isOrdersLoading || isTradesLoading || isSummaryLoading
-                ? 'not-allowed'
-                : 'pointer',
-          }}
+          style={withDisabled(
+            buttonSecondaryStyle,
+            isOrdersLoading || isTradesLoading || isSummaryLoading,
+          )}
         >
           Refresh history
         </button>
@@ -341,10 +288,7 @@ export default function HistoryPanel({
         }}
       >
         <div>
-          <label
-            htmlFor="history-symbol"
-            style={{ display: 'block', marginBottom: 6 }}
-          >
+          <label htmlFor="history-symbol" style={labelStyle}>
             Symbol
           </label>
           <input
@@ -357,10 +301,7 @@ export default function HistoryPanel({
         </div>
 
         <div>
-          <label
-            htmlFor="history-side"
-            style={{ display: 'block', marginBottom: 6 }}
-          >
+          <label htmlFor="history-side" style={labelStyle}>
             Side
           </label>
           <select
@@ -375,14 +316,18 @@ export default function HistoryPanel({
           </select>
         </div>
 
-        <button type="button" onClick={handleApplyFilters} style={primaryButtonStyle}>
+        <button
+          type="button"
+          onClick={handleApplyFilters}
+          style={buttonPrimaryStyle}
+        >
           Apply
         </button>
 
         <button
           type="button"
           onClick={handleClearFilters}
-          style={secondaryButtonStyle}
+          style={buttonSecondaryStyle}
         >
           Clear
         </button>
@@ -396,28 +341,28 @@ export default function HistoryPanel({
           marginBottom: 20,
         }}
       >
-        <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+        <div style={cardStyle}>
           <strong>Total trades</strong>
           <p>{summary?.totalTrades ?? '—'}</p>
         </div>
-        <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+        <div style={cardStyle}>
           <strong>Closed trades</strong>
           <p>{summary?.closedTrades ?? '—'}</p>
         </div>
-        <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+        <div style={cardStyle}>
           <strong>Realized PnL</strong>
           <p style={{ color: pnlColor(summary?.totalRealizedPnl) }}>
             {summary?.totalRealizedPnl ?? '—'}
           </p>
         </div>
-        <div style={{ padding: 12, border: '1px solid #2a2a2a', borderRadius: 10 }}>
+        <div style={cardStyle}>
           <strong>Win rate</strong>
           <p>{summary?.winRate ?? '—'}%</p>
         </div>
       </div>
 
       {summaryError ? (
-        <p style={{ color: '#ff6b6b', marginBottom: 16 }}>{summaryError}</p>
+        <p style={{ ...dangerTextStyle, marginBottom: 16 }}>{summaryError}</p>
       ) : null}
 
       <div
@@ -481,7 +426,7 @@ export default function HistoryPanel({
             </div>
           </div>
 
-          {tradesError ? <p style={{ color: '#ff6b6b' }}>{tradesError}</p> : null}
+          {tradesError ? <p style={dangerTextStyle}>{tradesError}</p> : null}
           {isTradesLoading ? <p>Loading trades...</p> : null}
 
           {!isTradesLoading && !tradesError && !trades?.items?.length ? (
@@ -492,15 +437,7 @@ export default function HistoryPanel({
             <>
               <div style={{ display: 'grid', gap: 10 }}>
                 {trades.items.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: 12,
-                      border: '1px solid #2a2a2a',
-                      borderRadius: 10,
-                      background: '#171717',
-                    }}
-                  >
+                  <div key={item.id} style={cardStyle}>
                     <strong>{item.symbol}</strong>
                     <p style={{ margin: '6px 0' }}>Side: {item.side}</p>
                     <p style={{ margin: '6px 0' }}>Qty: {item.quantity}</p>
@@ -566,7 +503,7 @@ export default function HistoryPanel({
             </div>
           </div>
 
-          {ordersError ? <p style={{ color: '#ff6b6b' }}>{ordersError}</p> : null}
+          {ordersError ? <p style={dangerTextStyle}>{ordersError}</p> : null}
           {isOrdersLoading ? <p>Loading rejected orders...</p> : null}
 
           {!isOrdersLoading && !ordersError && !orders?.items?.length ? (
@@ -577,15 +514,7 @@ export default function HistoryPanel({
             <>
               <div style={{ display: 'grid', gap: 10 }}>
                 {orders.items.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: 12,
-                      border: '1px solid #2a2a2a',
-                      borderRadius: 10,
-                      background: '#171717',
-                    }}
-                  >
+                  <div key={item.id} style={cardStyle}>
                     <strong>{item.symbol}</strong>
                     <p style={{ margin: '6px 0' }}>Side: {item.side}</p>
                     <p style={{ margin: '6px 0' }}>Qty: {item.quantity}</p>
@@ -594,7 +523,7 @@ export default function HistoryPanel({
                     </p>
                     <p style={{ margin: '6px 0' }}>Status: {item.status}</p>
                     {item.rejectionReason ? (
-                      <p style={{ margin: '6px 0', color: '#ff6b6b' }}>
+                      <p style={{ margin: '6px 0', ...dangerTextStyle }}>
                         Reason: {item.rejectionReason}
                       </p>
                     ) : null}
