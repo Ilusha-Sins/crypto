@@ -1,7 +1,31 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from 'react';
+import {
+  cardStyle,
+  inputStyle,
+  labelStyle,
+  subtleTextStyle,
+} from '../styles/ui';
 
 interface RiskCalculatorProps {
   currentPrice: number;
+}
+
+function trimTrailingZeros(value: string) {
+  return value.replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '');
+}
+
+function formatNumber(value: number, digits = 2) {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+
+  return trimTrailingZeros(value.toFixed(digits));
+}
+
+function resultColor(value: number) {
+  if (value > 0) return '#51cf66';
+  if (value < 0) return '#ff6b6b';
+  return '#fff';
 }
 
 export default function RiskCalculator({ currentPrice }: RiskCalculatorProps) {
@@ -12,57 +36,63 @@ export default function RiskCalculator({ currentPrice }: RiskCalculatorProps) {
   const [takeProfit, setTakeProfit] = useState(0);
   const [isLong, setIsLong] = useState(true);
 
-  // Update calculator when coin changes (currentPrice resets to 0 during load)
   useEffect(() => {
-    // If loading new symbol (price 0), reset entry to allow re-initialization
     if (currentPrice === 0) {
-        if (entryPrice !== 0) setEntryPrice(0);
-        return;
+      if (entryPrice !== 0) {
+        setEntryPrice(0);
+      }
+      return;
     }
 
-    // Initialize values if entryPrice is 0 (first load or after reset)
     if (currentPrice > 0 && entryPrice === 0) {
-        setEntryPrice(currentPrice);
-        if (isLong) {
-            setStopLoss(currentPrice * 0.98);
-            setTakeProfit(currentPrice * 1.04);
-        } else {
-            setStopLoss(currentPrice * 1.02);
-            setTakeProfit(currentPrice * 0.96);
-        }
+      setEntryPrice(currentPrice);
+
+      if (isLong) {
+        setStopLoss(currentPrice * 0.98);
+        setTakeProfit(currentPrice * 1.04);
+      } else {
+        setStopLoss(currentPrice * 1.02);
+        setTakeProfit(currentPrice * 0.96);
+      }
     }
   }, [currentPrice, entryPrice, isLong]);
 
-  const handleDirectionChange = (newIsLong: boolean) => {
-    setIsLong(newIsLong);
+  const handleDirectionChange = (nextIsLong: boolean) => {
+    setIsLong(nextIsLong);
+
     if (entryPrice > 0) {
-        if (newIsLong) {
-            setStopLoss(entryPrice * 0.98);
-            setTakeProfit(entryPrice * 1.04);
-        } else {
-            setStopLoss(entryPrice * 1.02);
-            setTakeProfit(entryPrice * 0.96);
-        }
+      if (nextIsLong) {
+        setStopLoss(entryPrice * 0.98);
+        setTakeProfit(entryPrice * 1.04);
+      } else {
+        setStopLoss(entryPrice * 1.02);
+        setTakeProfit(entryPrice * 0.96);
+      }
     }
   };
 
-  const calculate = () => {
+  const results = useMemo(() => {
     const riskAmount = (balance * riskPercent) / 100;
-    
+
     let priceDiff = 0;
     let rewardDiff = 0;
 
     if (isLong) {
-        priceDiff = entryPrice - stopLoss;
-        rewardDiff = takeProfit - entryPrice;
+      priceDiff = entryPrice - stopLoss;
+      rewardDiff = takeProfit - entryPrice;
     } else {
-        priceDiff = stopLoss - entryPrice;
-        rewardDiff = entryPrice - takeProfit;
+      priceDiff = stopLoss - entryPrice;
+      rewardDiff = entryPrice - takeProfit;
     }
 
-    // Safety check for invalid calculation inputs
     if (priceDiff <= 0 || entryPrice <= 0) {
-        return { riskAmount, positionSize: 0, positionUsd: 0, rrRatio: 0, profit: 0 };
+      return {
+        riskAmount,
+        positionSize: 0,
+        positionUsd: 0,
+        rrRatio: 0,
+        profit: 0,
+      };
     }
 
     const positionSize = riskAmount / priceDiff;
@@ -71,89 +101,272 @@ export default function RiskCalculator({ currentPrice }: RiskCalculatorProps) {
     const rrRatio = priceDiff === 0 ? 0 : rewardDiff / priceDiff;
 
     return {
-        riskAmount,
-        positionSize: isFinite(positionSize) ? positionSize : 0,
-        positionUsd: isFinite(positionUsd) ? positionUsd : 0,
-        profit: isFinite(profit) ? profit : 0,
-        rrRatio: isFinite(rrRatio) ? rrRatio : 0
+      riskAmount,
+      positionSize: Number.isFinite(positionSize) ? positionSize : 0,
+      positionUsd: Number.isFinite(positionUsd) ? positionUsd : 0,
+      profit: Number.isFinite(profit) ? profit : 0,
+      rrRatio: Number.isFinite(rrRatio) ? rrRatio : 0,
     };
-  };
+  }, [balance, riskPercent, entryPrice, stopLoss, takeProfit, isLong]);
 
-  const results = calculate();
+  const rrColor =
+    results.rrRatio >= 2 ? '#51cf66' : results.rrRatio >= 1 ? '#f59e0b' : '#ff6b6b';
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 h-full flex flex-col">
-      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-        <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 36v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-        </svg>
-        Калькулятор позиції
+    <div
+      style={{
+        padding: 16,
+        color: '#fff',
+        background: 'transparent',
+      }}
+    >
+      <h3
+        style={{
+          margin: '0 0 16px 0',
+          fontSize: 18,
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            display: 'inline-flex',
+            width: 28,
+            height: 28,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 8,
+            background: 'rgba(37, 99, 235, 0.18)',
+            color: '#93c5fd',
+            fontSize: 14,
+            fontWeight: 800,
+          }}
+        >
+          fx
+        </span>
+        Risk Calculator
       </h3>
 
-      {/* Direction Toggle */}
-      <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
-          <button 
-            onClick={() => handleDirectionChange(true)}
-            className={`flex-1 py-1.5 text-sm font-semibold rounded transition-all ${isLong ? 'bg-green-500 text-white shadow' : 'text-gray-500'}`}
-          >
-            Long (Купівля)
-          </button>
-          <button 
-            onClick={() => handleDirectionChange(false)}
-            className={`flex-1 py-1.5 text-sm font-semibold rounded transition-all ${!isLong ? 'bg-red-500 text-white shadow' : 'text-gray-500'}`}
-          >
-            Short (Продаж)
-          </button>
+      <div
+        style={{
+          display: 'flex',
+          background: '#171717',
+          padding: 4,
+          borderRadius: 10,
+          marginBottom: 16,
+          border: '1px solid #2a2a2a',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => handleDirectionChange(true)}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 700,
+            background: isLong ? '#16a34a' : 'transparent',
+            color: isLong ? '#fff' : '#9ca3af',
+          }}
+        >
+          Long
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDirectionChange(false)}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 700,
+            background: !isLong ? '#dc2626' : 'transparent',
+            color: !isLong ? '#fff' : '#9ca3af',
+          }}
+        >
+          Short
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-              <label className="block text-xs text-gray-500 mb-1">Депозит ($)</label>
-              <input type="number" value={balance} onChange={e => setBalance(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <div>
+          <label style={labelStyle}>Balance ($)</label>
+          <input
+            type="number"
+            value={balance}
+            onChange={(event) => setBalance(Number(event.target.value))}
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={labelStyle}>Risk (%)</label>
+          <input
+            type="number"
+            value={riskPercent}
+            onChange={(event) => setRiskPercent(Number(event.target.value))}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={labelStyle}>Entry Price</label>
+          <input
+            type="number"
+            value={entryPrice}
+            onChange={(event) => setEntryPrice(Number(event.target.value))}
+            style={inputStyle}
+          />
+          <div style={{ marginTop: 6, fontSize: 12, ...subtleTextStyle }}>
+            Live reference price: {currentPrice > 0 ? currentPrice : '—'}
           </div>
-          <div>
-              <label className="block text-xs text-gray-500 mb-1">Ризик (%)</label>
-              <input type="number" value={riskPercent} onChange={e => setRiskPercent(Number(e.target.value))} className="w-full p-2 border rounded text-sm" />
-          </div>
-          <div className="col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">Ціна входу</label>
-              <input type="number" value={entryPrice} onChange={e => setEntryPrice(Number(e.target.value))} className="w-full p-2 border rounded text-sm font-bold" />
-          </div>
-          <div>
-              <label className="block text-xs text-gray-500 mb-1">Stop Loss</label>
-              <input type="number" value={stopLoss} onChange={e => setStopLoss(Number(e.target.value))} className={`w-full p-2 border rounded text-sm border-red-200 bg-red-50`} />
-          </div>
-          <div>
-              <label className="block text-xs text-gray-500 mb-1">Take Profit</label>
-              <input type="number" value={takeProfit} onChange={e => setTakeProfit(Number(e.target.value))} className={`w-full p-2 border rounded text-sm border-green-200 bg-green-50`} />
-          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Stop Loss</label>
+          <input
+            type="number"
+            value={stopLoss}
+            onChange={(event) => setStopLoss(Number(event.target.value))}
+            style={{
+              ...inputStyle,
+              borderColor: '#3f1d1d',
+              background: '#1a1111',
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={labelStyle}>Take Profit</label>
+          <input
+            type="number"
+            value={takeProfit}
+            onChange={(event) => setTakeProfit(Number(event.target.value))}
+            style={{
+              ...inputStyle,
+              borderColor: '#183322',
+              background: '#101a14',
+            }}
+          />
+        </div>
       </div>
 
-      <div className="bg-gray-50 rounded-lg p-3 space-y-2 border border-gray-100 flex-1 flex flex-col justify-center">
-          <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Ризик ($):</span>
-              <span className="font-semibold text-red-600">-${results.riskAmount.toFixed(2)}</span>
+      <div
+        style={{
+          ...cardStyle,
+          display: 'grid',
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'center',
+          }}
+        >
+          <span style={subtleTextStyle}>Risk ($)</span>
+          <strong style={{ color: '#ff6b6b' }}>
+            -${formatNumber(results.riskAmount, 2)}
+          </strong>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'center',
+          }}
+        >
+          <span style={subtleTextStyle}>Potential Profit</span>
+          <strong style={{ color: '#51cf66' }}>
+            +${formatNumber(results.profit, 2)}
+          </strong>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'center',
+            paddingTop: 10,
+            borderTop: '1px solid #2a2a2a',
+          }}
+        >
+          <span style={subtleTextStyle}>R:R Ratio</span>
+          <strong style={{ color: rrColor }}>
+            1 : {formatNumber(results.rrRatio, 2)}
+          </strong>
+        </div>
+
+        <div
+          style={{
+            marginTop: 4,
+            paddingTop: 10,
+            borderTop: '1px solid #2a2a2a',
+          }}
+        >
+          <div style={{ fontSize: 12, marginBottom: 6, ...subtleTextStyle }}>
+            Recommended position size
           </div>
-          <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Потенційний прибуток:</span>
-              <span className="font-semibold text-green-600">+${results.profit.toFixed(2)}</span>
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: '#93c5fd',
+              marginBottom: 4,
+            }}
+          >
+            {formatNumber(results.positionSize, 4)} coins
           </div>
-          <div className="flex justify-between text-sm border-t border-gray-200 pt-2 mt-1">
-              <span className="text-gray-500">R:R Ratio:</span>
-              <span className={`font-bold ${results.rrRatio >= 2 ? 'text-green-600' : results.rrRatio >= 1 ? 'text-yellow-600' : 'text-red-500'}`}>
-                  1 : {results.rrRatio.toFixed(2)}
-              </span>
+          <div style={{ fontSize: 13, ...subtleTextStyle }}>
+            ~${formatNumber(results.positionUsd, 2)}
           </div>
-          
-          <div className="mt-2 pt-2 border-t border-gray-200">
-             <div className="text-xs text-gray-400 mb-1">Рекомендований розмір позиції:</div>
-             <div className="text-lg font-bold text-blue-700">
-                 {results.positionSize.toFixed(4)} монет
-             </div>
-             <div className="text-xs text-gray-500">
-                 (~${results.positionUsd.toFixed(2)})
-             </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 4,
+            paddingTop: 10,
+            borderTop: '1px solid #2a2a2a',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 10,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 12, marginBottom: 4, ...subtleTextStyle }}>
+              Entry vs SL
+            </div>
+            <div style={{ color: resultColor(entryPrice - stopLoss) }}>
+              {formatNumber(Math.abs(entryPrice - stopLoss), 4)}
+            </div>
           </div>
+
+          <div>
+            <div style={{ fontSize: 12, marginBottom: 4, ...subtleTextStyle }}>
+              Entry vs TP
+            </div>
+            <div style={{ color: resultColor(takeProfit - entryPrice) }}>
+              {formatNumber(Math.abs(takeProfit - entryPrice), 4)}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
